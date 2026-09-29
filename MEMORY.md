@@ -137,6 +137,18 @@ Sin cambios de código.
 
 ---
 
+## Sesión 4 — 2026-09-29 · publicación en GitHub
+
+Publicación en `https://github.com/leimagen/study-diary-logger` (público,
+rama `main`). Commit `2f607b2`.
+
+El directorio local se llama `aic-proj1`, pero el paquete y el repo se llaman
+`study-diary-logger`: se renombró `package.json` y el encabezado de `README.md`
+para que no se confuse el nombre de la carpeta con el del proyecto. El lockfile
+se regeneró con `npm install --package-lock-only` (no hace falta reinstalar).
+
+---
+
 ## Pendiente / ideas
 
 Nada comprometido. Ideas que se comentaron y siguen abiertas:
