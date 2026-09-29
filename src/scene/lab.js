@@ -86,6 +86,10 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   const pmrem = new PMREMGenerator(renderer);
   const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
   scene.environment = envRT.texture;
+  // La IBL es una fuente de luz INVISIBLE que inunda toda la sala. Se deja
+  // una fraccion para que los reflejos sigan siendo creibles sin que el
+  // ambiente washes out la penumbra que quiero.
+  scene.environmentIntensity = 0.12;
 
   // Si existen texturas generadas con ComfyUI en public/textures, se aplican
   // encima de las procedurales. No bloquea: la escena ya esta visible.
@@ -180,9 +184,9 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     const focusTarget = camera.position.distanceTo(reactor.group.position);
     postFX.setFocus(focusTarget);
 
-    // Bloom generoso con la racha, con techo para no lavar la imagen. En una
-    // sala casi a oscuras es lo que hace legibles los elementos emisivos.
-    postFX.setBloom(0.38 + Math.min(currentStreak, 20) * 0.012, 0.35, 0.72);
+    // Bloom generoso: es lo que hace legibles las torres, las tiras de los
+    // pilares y el reactor en una sala por lo demas a oscuras.
+    postFX.setBloom(0.62 + Math.min(currentStreak, 20) * 0.015, 0.42, 0.55);
 
     postFX.render();
     updateHover();

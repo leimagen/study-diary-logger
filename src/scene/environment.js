@@ -15,14 +15,12 @@ import {
   CircleGeometry,
   Color,
   CylinderGeometry,
-  DirectionalLight,
   FogExp2,
   Group,
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  PointLight,
   RectAreaLight,
   RingGeometry,
   SphereGeometry,
@@ -56,30 +54,14 @@ function createFloor({ radius = 44 } = {}) {
     envMapIntensity: 0.45,
   });
 
-  // Segunda capa: rejilla emisiva sutil, la parte "holográfica".
-  const grid = new Mesh(
-    new CircleGeometry(radius, 96),
-    new MeshStandardMaterial({
-      color: 0x0a1622,
-      emissive: new Color(0x1d7fa8),
-      emissiveIntensity: 0.35,
-      roughness: 0.3,
-      metalness: 0.6,
-      transparent: true,
-      opacity: 0.18,
-      depthWrite: false,
-    }),
-  );
-  grid.rotation.x = -Math.PI / 2;
-  grid.position.y = 0.012;
-
+  // Sin capa emisiva encima. Cuando el suelo era un shader plano esto le
+  // daba lectura holografica; ahora que es PBR con textura, el bloom de esta
+  // capa la inundaba y hacia parecer que la textura desaparecia.
   const mesh = new Mesh(new CircleGeometry(radius, 96), material);
   mesh.rotation.x = -Math.PI / 2;
   mesh.receiveShadow = true;
 
-  const group = new Group();
-  group.add(mesh, grid);
-  return { group, mesh, material };
+  return { group: mesh, material };
 }
 
 /* ------------------------------------------------------------------ */
@@ -329,39 +311,20 @@ export function createEnvironment(scene) {
   scene.add(group);
 
   // Iluminacion.
-  // El hemisférico da la base (cielo frío / suelo oscuro); sin él, las caras
-  // no iluminadas son negro puro y la escena pierde volumen.
-  const ambient = new HemisphereLight(0x4a86ad, 0x080f16, 0.18);
-  scene.add(ambient);
-
-  // Foco de museo sobre el reactor. Es la luz protagonist: el resto se
-  // atenua para que el objeto central domine y la sala caiga en penumbra.
-  const { light: showcase } = createSpotlightRig();
+  //
+  // Solo hay UNA fuente real: el area light del reactor. Todo lo demas que
+  //未见 se apaga, incluida la IBL, que ademas de ser una fuente invisible
+  // inundaba la sala entera. Los siguientes elementos NO son luces: brillan
+  // por emisivo, y el bloom los hace leer como fuentes de luz.
+  //   - las torres de materia
+  //   - las tiras de los pilares
+  const showcase = createSpotlightRig().light;
   scene.add(showcase);
 
-  const keyLight = new PointLight(0xbfefff, 10, 34, 2);
-  keyLight.position.set(0, 8, 0);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(1024, 1024);
-  keyLight.shadow.camera.near = 0.5;
-  keyLight.shadow.camera.far = 40;
-  keyLight.shadow.bias = -0.002;
-  scene.add(keyLight);
-
-  // Acentos de color en los extremos: rompen la penumbra sin iluminar el centro.
-  const accentLight = new PointLight(0xff6ad5, 9, 20, 2);
-  accentLight.position.set(-11, 2.6, -10);
-  scene.add(accentLight);
-
-  const fillLight = new PointLight(0x2a7fff, 6, 24, 2);
-  fillLight.position.set(12, 4, 10);
-  scene.add(fillLight);
-
-  // Luz rasante desde atrás: define los bordes de las columnas y las cajas.
-  const rimLight = new DirectionalLight(0x7fd4ff, 0.45);
-  rimLight.position.set(-9, 13, -17);
-  rimLight.target.position.set(0, 0, 0);
-  scene.add(rimLight, rimLight.target);
+  // Un mínimo de rebote: sin nada, las caras no iluminadas son negro puro y
+  // los objetos pierden volumen. Muy bajo a propósito.
+  const ambient = new HemisphereLight(0x2b4a5e, 0x04080c, 0.07);
+  scene.add(ambient);
 
   let time = 0;
 
@@ -388,12 +351,9 @@ export function createEnvironment(scene) {
         ring.rotation.z += dt * (0.05 + i * 0.035) * (i % 2 === 0 ? 1 : -1);
       });
 
-      const pulse = 1 + Math.sin(time * 2.2) * 0.06 + Math.min(streak, 10) * 0.04;
-      keyLight.intensity = 10 * pulse;
-      accentLight.intensity = 9 * (1 + Math.sin(time * 1.3 + 1.2) * 0.12);
-      rimLight.intensity = 0.45 * (1 + Math.sin(time * 0.7) * 0.05);
-      // El foco de museo late muy despacio: dramatismo, no discoteca.
-      showcase.intensity = 22 * (1 + Math.sin(time * 0.5) * 0.04);
+      // El foco de museo late muy despacio y crece con la racha: es la
+      // referencia dramatic a la que se ajusta el resto.
+      showcase.intensity = 22 * (1 + Math.sin(time * 0.5) * 0.04) * (1 + Math.min(streak, 10) * 0.03);
     },
   };
 }

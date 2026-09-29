@@ -19,7 +19,10 @@ const VERTEX = /* glsl */ `
   attribute float aSize;
   attribute float aLife;
   attribute float aAge;
+  attribute float aSeed;
   attribute vec3 aColor;
+
+  uniform float uTime;
 
   varying float vLife;
   varying vec3 vColor;
@@ -29,11 +32,16 @@ const VERTEX = /* glsl */ `
     vColor = aColor;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 
-    // Aparicion gradual. Sin esto el polvo amanece de golpe en el aire; con
-    // esto entra como una suspension que se va formando.
+    // Aparicion gradual. Sin esto el polvo amanece de golpe en el aire.
     float fadeIn = smoothstep(0.0, 0.9, aAge);
-    // Las particulas se encogen al morir y crecen al nacer.
-    float grow = fadeIn * (1.0 - smoothstep(0.6, 1.0, 1.0 - aLife));
+
+    // Parpadeo: cada particula late a su ritmo y con su fase. Sin esto el
+    // polvo se ve como puntos estaticos y muerde demasiado.
+    float flicker = 0.55
+      + 0.28 * sin(uTime * (2.4 + aSeed * 7.0) + aSeed * 31.4)
+      + 0.17 * sin(uTime * (6.1 + aSeed * 11.0) + aSeed * 7.7);
+
+    float grow = fadeIn * flicker * (1.0 - smoothstep(0.6, 1.0, 1.0 - aLife));
 
     gl_PointSize = aSize * grow * (300.0 / max(0.001, -mvPosition.z));
     gl_Position = projectionMatrix * mvPosition;
@@ -71,6 +79,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   const sizes = new Float32Array(capacity);
   const lives = new Float32Array(capacity); // 0 = muerta, 1 = recién nacida
   const ages = new Float32Array(capacity); // segundos vividos: usada por el fade-in
+  const seeds = new Float32Array(capacity); // fase del parpadeo, fija por particula
 
   // Buffers de integración en CPU (no subidos a GPU).
   const velocities = new Float32Array(capacity * 3);
@@ -89,10 +98,16 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   geometry.setAttribute('aSize', new BufferAttribute(sizes, 1));
   geometry.setAttribute('aLife', new BufferAttribute(lives, 1));
   geometry.setAttribute('aAge', new BufferAttribute(ages, 1));
+  // Semilla por particula: fase y frecuencia del parpadeo. Fija al nacer, para
+  // que la chispa no parpadee de forma distinta en cada reciclaje del pool.
+  geometry.setAttribute('aSeed', new BufferAttribute(seeds, 1));
 
   const material = new ShaderMaterial({
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
+    uniforms: {
+      uTime: { value: 0 },
+    },
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
@@ -128,11 +143,10 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
     lives[i] = 1;
     maxLifes[i] = life;
     ages[i] = 0;
+    seeds[i] = Math.random();
     drag[i] = dragFactor;
     gravity[i] = gravityFactor;
   }
-
-  const tmp = { x: 0, y: 0, z: 0 };
 
   /**
    * Ráfaga esférica de chispas.
@@ -224,9 +238,9 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
               z: (Math.random() - 0.5) * 0.14,
             },
             color: Math.random() < 0.15 ? 0xffe9c4 : color,
-            // Tamaño convariante en pantalla gracias al factor 300/-z del
-            // shader: por eso 0.1-0.3 ya son varios píxeles de cerca.
-            size: 0.1 + Math.random() * 0.3,
+            // Tamano covariante en pantalla gracias al factor 300/-z del
+            // shader. Bajado: a 0.1-0.3 los puntos mordian demasiado.
+            size: 0.05 + Math.random() * 0.16,
             life: 8 + Math.random() * 8,
             dragFactor: 0.15,
             gravityFactor: 0.01,
@@ -239,6 +253,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   function update(dt) {
     let alive = 0;
     const step = Math.min(dt, 0.05); // evita saltos al volver de una pestaña inactiva
+    material.uniforms.uTime.value += step;
 
     for (let i = 0; i < capacity; i++) {
       if (lives[i] <= 0) continue;
