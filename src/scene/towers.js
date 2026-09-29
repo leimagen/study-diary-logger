@@ -16,6 +16,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   NormalBlending,
+  PointLight,
   RingGeometry,
   ShaderMaterial,
 } from 'three';
@@ -162,6 +163,13 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
     base.position.y = 0.04;
     holder.add(base);
 
+    // Luz real de la torre. Una torre que solo brilla con emisivo se lee como
+    // un objeto pintado; para que ilumine de verdad hace falta una fuente en
+    // la escena. El color es el de la materia.
+    const lamp = new PointLight(color, 0, 11, 2);
+    lamp.position.y = 0.6;
+    holder.add(lamp);
+
     // La etiqueta muestra horas y minutos: "3 h" frente a "3 h 20 min" no
     // permite comparar materias con precisión.
     const label = createLabel(subject, { color: '#e8fbff', borderColor: hexToRgba(color, 0.6) });
@@ -173,7 +181,7 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
     holder.rotation.y = -angle;
 
     group.add(holder);
-    return { holder, mesh, material, base, cap, label, index, color, currentHeight: 0, targetHeight: 0 };
+    return { holder, mesh, material, base, cap, lamp, label, index, color, currentHeight: 0, targetHeight: 0 };
   }
 
   /**
@@ -240,8 +248,13 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
       tower.cap.position.y = tower.currentHeight;
       tower.material.uniforms.uTime.value = time * 0.6 + tower.index;
       tower.label.position.set(0, tower.currentHeight + 0.55, 0);
+      // La luz crece con la altura: una materia que ha studiado mas ilumina
+      // mas, que es justo lo que hace que la torre se lea como fuente.
+      const energy = tower.material.uniforms.uEnergy.value;
+      tower.lamp.intensity = 5 + tower.currentHeight * 3.2 * (0.4 + energy * 0.6);
+      tower.lamp.position.y = tower.currentHeight * 0.55 + 0.4;
       // La etiqueta siempre mira a cámara: los sprites ya lo hacen solos.
-      tower.base.material.opacity = 0.25 + tower.material.uniforms.uEnergy.value * 0.35;
+      tower.base.material.opacity = 0.25 + energy * 0.35;
     }
   }
 

@@ -93,7 +93,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
    * aunque sea tenue se refleja como un manchon blanco que se ve incluso
    * fuera del domo y ciega al girar la camara. Casi apagada.
    */
-  scene.environmentIntensity = 0.03;
+  scene.environmentIntensity = 0;
 
   // Si existen texturas generadas con ComfyUI en public/textures, se aplican
   // encima de las procedurales. No bloquea: la escena ya esta visible.
@@ -108,7 +108,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   // Charco de agua bajo el reactor: refleja de verdad la escena, y con el
   // foco de museo encima el reflejo del reactor es el punto focal.
-  const puddle = createWaterPuddle({ radius: 5.2 });
+  const puddle = createWaterPuddle({ size: 26 });
   scene.add(puddle.group);
 
   const sparks = createSparkSystem({ capacity: 1600 });
