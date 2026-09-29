@@ -457,7 +457,6 @@ function deriveMaps(image, key) {
 
 /** Qué fichero de public/textures mapea a cada material. */
 const COMFY_MAPS = {
-  floor: { file: 'floor_metal.png', flip: 1, repeat: 16 },
   wall: { file: 'wall_panel.png', flip: 1, repeat: 8 },
   pillar: { file: 'pillar_metal.png', flip: 1, repeat: 3 },
   panel: { file: 'panel_dark.png', flip: 1, repeat: 2 },

@@ -281,7 +281,10 @@ function createProps() {
  * Es lo que convierte el reactor en "objeto milenario exhibited en el centro".
  */
 function createSpotlightRig() {
-  const light = new RectAreaLight(0xdff2ff, 22, 7, 7);
+  // Ancha a proposito: con 7x7 el charco de luz era tan pequeño que la
+  // rejilla de placas del suelo no se leia. Un foco de museo ilumina un
+  // area amplia y deja el resto en penumbra.
+  const light = new RectAreaLight(0xdff2ff, 34, 17, 17);
   light.position.set(0, 11.5, 0);
   // Mira hacia abajo: el reactor queda bajo el cono.
   light.lookAt(0, 0, 0);
@@ -293,7 +296,9 @@ function createSpotlightRig() {
 /* ------------------------------------------------------------------ */
 
 export function createEnvironment(scene) {
-  scene.fog = new FogExp2(0x060d16, 0.018);
+  // Niebla casi negra. Con un color de niebla azul claro, el fondo se
+  // aclaraba y marcaba una banda visible en la union del suelo con la pared.
+  scene.fog = new FogExp2(0x02060a, 0.02);
 
   const group = new Group();
   const { group: floorGroup, mesh: floorMesh, material: floorMat } = createFloor();
@@ -321,9 +326,10 @@ export function createEnvironment(scene) {
   const showcase = createSpotlightRig().light;
   scene.add(showcase);
 
-  // Un mínimo de rebote: sin nada, las caras no iluminadas son negro puro y
-  // los objetos pierden volumen. Muy bajo a propósito.
-  const ambient = new HemisphereLight(0x2b4a5e, 0x04080c, 0.07);
+  // Un minimo de rebote: sin nada, las caras no iluminadas son negro puro y
+  // los objetos pierden volumen. 0.07 todavia se notaba en la union del
+  // suelo con las paredes, que es justo lo que quero eliminar.
+  const ambient = new HemisphereLight(0x2b4a5e, 0x000000, 0.025);
   scene.add(ambient);
 
   let time = 0;
@@ -353,7 +359,7 @@ export function createEnvironment(scene) {
 
       // El foco de museo late muy despacio y crece con la racha: es la
       // referencia dramatic a la que se ajusta el resto.
-      showcase.intensity = 22 * (1 + Math.sin(time * 0.5) * 0.04) * (1 + Math.min(streak, 10) * 0.03);
+      showcase.intensity = 34 * (1 + Math.sin(time * 0.5) * 0.04) * (1 + Math.min(streak, 10) * 0.03);
     },
   };
 }
