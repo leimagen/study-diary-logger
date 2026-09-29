@@ -23,8 +23,8 @@ export function createPostFX(renderer, scene, camera, options = {}) {
     focus = 14,
     // DOF agresivo a proposito: esconde el detalle flojo del fondo y da
     // profundidad. No es "pixelado": eso es aliasing, que se arregla con MSAA.
-    aperture = 0.00016,
-    maxblur = 0.011,
+    aperture = 0.00026,
+    maxblur = 0.016,
   } = options;
 
   const size = renderer.getSize(new Vector2());

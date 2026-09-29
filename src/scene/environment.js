@@ -15,15 +15,16 @@ import {
   CircleGeometry,
   Color,
   CylinderGeometry,
+  DoubleSide,
   FogExp2,
   Group,
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  RectAreaLight,
   RingGeometry,
   SphereGeometry,
+  SpotLight,
   TorusGeometry,
 } from 'three';
 import { metalSurface, labFloor, wallPanels } from './textures.js';
@@ -275,20 +276,44 @@ function createProps() {
 }
 
 /**
- * Luz deArea sobre el reactor: el foco de museo.
+ * Foco de museo: panel suspendido sobre el reactor.
  *
- * Un RectAreaLight da una luz suave y con forma, imposible con un PointLight.
- * Es lo que convierte el reactor en "objeto milenario exhibited en el centro".
+ * Es un SpotLight, no un RectAreaLight. El area light ilumina en todas
+ * direcciones sin cono, y con 17x17 se desbordaba por el suelo como un
+ * manchon blanco. El foco da exactamente la referencia: cono suave desde un
+ * panel pequeño, con la sala alrededor en penumbra.
+ *
+ * @returns {{spot: SpotLight, panel: Mesh, glow: Mesh}}
  */
 function createSpotlightRig() {
-  // Ancha a proposito: con 7x7 el charco de luz era tan pequeño que la
-  // rejilla de placas del suelo no se leia. Un foco de museo ilumina un
-  // area amplia y deja el resto en penumbra.
-  const light = new RectAreaLight(0xdff2ff, 34, 17, 17);
-  light.position.set(0, 11.5, 0);
-  // Mira hacia abajo: el reactor queda bajo el cono.
-  light.lookAt(0, 0, 0);
-  return { light };
+  const spot = new SpotLight(0xdff2ff, 260, 26, 0.42, 0.75, 1.6);
+  spot.position.set(0, 11.5, 0);
+  spot.target.position.set(0, 0, 0);
+
+  // El panel: la luminaria visible, un disco emisivo suspendido.
+  const panel = new Mesh(
+    new CircleGeometry(1.5, 48),
+    new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }),
+  );
+  panel.rotation.x = Math.PI / 2;
+  panel.position.set(0, 11.55, 0);
+
+  // Halo del panel, para que el bloom lo convierta en un foco creible.
+  const glow = new Mesh(
+    new RingGeometry(1.4, 2.4, 48),
+    new MeshBasicMaterial({
+      color: 0xbfe4ff,
+      transparent: true,
+      opacity: 0.35,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  glow.rotation.x = Math.PI / 2;
+  glow.position.set(0, 11.5, 0);
+
+  return { spot, spotTarget: spot.target, panel, glow };
 }
 
 /* ------------------------------------------------------------------ */
@@ -315,16 +340,12 @@ export function createEnvironment(scene) {
   group.add(floorGroup, dome, pillarGroup, ceiling, rings, props);
   scene.add(group);
 
-  // Iluminacion.
-  //
-  // Solo hay UNA fuente real: el area light del reactor. Todo lo demas que
-  //未见 se apaga, incluida la IBL, que ademas de ser una fuente invisible
-  // inundaba la sala entera. Los siguientes elementos NO son luces: brillan
-  // por emisivo, y el bloom los hace leer como fuentes de luz.
-  //   - las torres de materia
-  //   - las tiras de los pilares
-  const showcase = createSpotlightRig().light;
-  scene.add(showcase);
+  // 唯一 fuente real: el foco suspendido sobre el reactor. Las torres y las
+  // tiras de los pilares brillan por emisivo y el bloom los hace leer como
+  // fuentes, sin anadir luces reales que la desperdicie.
+  const rig = createSpotlightRig();
+  const showcase = rig.spot;
+  scene.add(showcase, rig.spotTarget, rig.panel, rig.glow);
 
   // Un minimo de rebote: sin nada, las caras no iluminadas son negro puro y
   // los objetos pierden volumen. 0.07 todavia se notaba en la union del

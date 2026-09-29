@@ -15,6 +15,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  NormalBlending,
   RingGeometry,
   ShaderMaterial,
 } from 'three';
@@ -56,37 +57,39 @@ const TOWER_FRAG = /* glsl */ `
   varying vec3 vViewDir;
 
   void main() {
-    // Fresnel para el volumen de vidrio.
-    float fresnel = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 2.0);
+    // Fresnel fuerte: el filo del cilindro es lo unico que brilla, el
+    // interior se queda en penumbra. Es lo que diferencia vidrio oscuro de
+    // barra de luz.
+    float fresnel = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 2.6);
+    float rim = smoothstep(0.25, 1.0, fresnel);
 
-    // Barrido de energía ascendente.
+    // Barrido de energia ascendente, muy contenido.
     float sweep = fract(vUv.y * 3.0 - uTime * 0.55);
-    float band = pow(1.0 - abs(sweep - 0.5) * 2.0, 8.0);
+    float band = pow(1.0 - abs(sweep - 0.5) * 2.0, 10.0);
 
-    // Segmentos horizontales tipo "escala de medición".
-    float segments = smoothstep(0.42, 0.5, abs(fract(vUv.y * 26.0) - 0.5));
+    // Escala de medicion: solo visible en el filo, no en el cuerpo.
+    float segments = smoothstep(0.44, 0.5, abs(fract(vUv.y * 22.0) - 0.5));
 
-    // Parte "llena" = proporción que representa esta materia en el total.
+    // Parte "llena" = proporcion que representa esta materia en el total.
     float filled = step(vUv.y, uFill);
 
-    vec3 color = uColor;
-    color += uColor * band * 0.30;
-    color += vec3(1.0) * segments * 0.05;
-    color *= 0.45 + fresnel * 0.55 + uEnergy * 0.15;
+    // Cuerpo de vidrio oscuro: casi negro, con un toque del color de la materia.
+    vec3 body = uColor * 0.10 + vec3(0.02, 0.05, 0.07);
 
-    // Opacidad contenida a proposito. Con blending aditivo y alfa alta el
-    // color se lava a pastel y la torre parece un cubo de plastico: el
-    // termino "filled" ademas lo saturaba hasta el blanco.
-    float glass = 0.16 + fresnel * 0.30 + band * 0.14 + segments * 0.05;
-    float fill  = 0.30 + fresnel * 0.38 + band * 0.18;
-    float alpha = mix(glass, fill, filled) * (0.55 + uEnergy * 0.25);
+    // Filo luminoso: aqui vive el color saturado.
+    vec3 rimColor = uColor * (1.0 + uEnergy * 0.5);
 
-    // El color se mantiene en el tono de la materia: se oscurece en el
-    // interior en vez de saturarse a blanco.
-    color = mix(color * 0.55, color, filled);
-    color += vec3(1.0) * band * 0.12;
+    vec3 color = mix(body, rimColor, rim);
+    color += uColor * band * 0.35 * rim;
+    color += vec3(1.0) * segments * 0.06 * rim;
+    // La parte rellena se intuye por unPlus de luz, no por opacidad.
+    color += rimColor * filled * 0.12;
 
-    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.5));
+    // Opacidad: baja en el cuerpo, alta en el filo. Asi el cilindro se lee
+    // como un tubo de vidrio y no como un cubo solido.
+    float alpha = (0.18 + rim * 0.62 + band * 0.10) * (0.7 + filled * 0.3);
+
+    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.85));
   }
 `;
 
@@ -113,8 +116,9 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
       fragmentShader: TOWER_FRAG,
       transparent: true,
       depthWrite: false,
-      side: DoubleSide,
-      blending: AdditiveBlending,
+      // Blending normal, no aditivo: el aditivo saturaba el color de la
+      // materia hasta pastel y lo convertia en plastico.
+      blending: NormalBlending,
       uniforms: {
         uColor: { value: new Color(color) },
         uTime: { value: index * 0.7 },

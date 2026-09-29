@@ -28,6 +28,7 @@ import { disposeTextures, upgradeWithComfy } from './textures.js';
 import { createReactor } from './reactor.js';
 import { createSparkSystem } from './particles.js';
 import { createSubjectTowers } from './towers.js';
+import { createWaterPuddle } from './water.js';
 import { createAchievementPedestals } from './pedestals.js';
 import { ACHIEVEMENTS } from '../core/gamification.js';
 
@@ -86,10 +87,13 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   const pmrem = new PMREMGenerator(renderer);
   const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
   scene.environment = envRT.texture;
-  // La IBL es una fuente de luz INVISIBLE que inunda toda la sala. Se deja
-  // una fraccion para que los reflejos sigan siendo creibles sin que el
-  // ambiente washes out la penumbra que quiero.
-  scene.environmentIntensity = 0.12;
+  /**
+   * Muy bajo a proposito. RoomEnvironment es una sala BLANCA: el suelo es
+   * metal y en angulo rasante el Fresnel sube a casi 1, asi que una IBL
+   * aunque sea tenue se refleja como un manchon blanco que se ve incluso
+   * fuera del domo y ciega al girar la camara. Casi apagada.
+   */
+  scene.environmentIntensity = 0.03;
 
   // Si existen texturas generadas con ComfyUI en public/textures, se aplican
   // encima de las procedurales. No bloquea: la escena ya esta visible.
@@ -101,6 +105,11 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   const reactor = createReactor();
   scene.add(reactor.group);
+
+  // Charco de agua bajo el reactor: refleja de verdad la escena, y con el
+  // foco de museo encima el reflejo del reactor es el punto focal.
+  const puddle = createWaterPuddle({ radius: 5.2 });
+  scene.add(puddle.group);
 
   const sparks = createSparkSystem({ capacity: 1600 });
   scene.add(sparks.points);
@@ -176,6 +185,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     reactor.update(dt);
     towers.tick(dt, time);
     pedestals.tick(dt, time);
+    puddle.update(dt);
     dust.update(dt);
     sparks.update(dt);
     controls.update();
