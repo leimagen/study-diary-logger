@@ -100,9 +100,9 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   const sparks = createSparkSystem({ capacity: 1600 });
   scene.add(sparks.points);
-  // Polvo continuo: se mantiene reemitiendo, no se siembra una vez.
+  // Polvo continuo: se mantiene reemitiendo, no se siembra una vez. No se
+  // prellena porque las particiones deben entrar con fade-in, no de golpe.
   const dust = sparks.createAmbientDust({ bounds: { x: 40, y: 13, z: 40 }, rate: 70 });
-  dust.update(2); // llena el aire de entrada sin esperar varios segundos
 
   const towers = createSubjectTowers({ maxSubjects: 10, radius: 8.5 });
   scene.add(towers.group);
@@ -180,8 +180,9 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     const focusTarget = camera.position.distanceTo(reactor.group.position);
     postFX.setFocus(focusTarget);
 
-    // Bloom con techo: mas racha = mas resplandor, pero sin lavar la escena.
-    postFX.setBloom(0.12 + Math.min(currentStreak, 20) * 0.006, 0.1, 0.95);
+    // Bloom generoso con la racha, con techo para no lavar la imagen. En una
+    // sala casi a oscuras es lo que hace legibles los elementos emisivos.
+    postFX.setBloom(0.38 + Math.min(currentStreak, 20) * 0.012, 0.35, 0.72);
 
     postFX.render();
     updateHover();

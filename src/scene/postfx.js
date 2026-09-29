@@ -15,23 +15,35 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 export function createPostFX(renderer, scene, camera, options = {}) {
   const {
     // Radius alto difunde el brillo por media pantalla: el reactor se comia el
-    // centro de la imagen. Threshold alto evita que todo lo emisivo florezca.
-    bloomStrength = 0.15,
-    bloomRadius = 0.1,
-    bloomThreshold = 0.95,
+    // Bloom generoso: es lo que rompe la oscuridad en un laboratorio con una
+    // sola luz principal. Radius alto lo difunde de mas.
+    bloomStrength = 0.45,
+    bloomRadius = 0.35,
+    bloomThreshold = 0.72,
     focus = 14,
-    // Apertura y maxblur altos emborronaban media escena: la falta de nitidez
-    // se leia como "pixelado" aunque el canvas fuese nativo.
-    aperture = 0.00006,
-    maxblur = 0.006,
+    // DOF agresivo a proposito: esconde el detalle flojo del fondo y da
+    // profundidad. No es "pixelado": eso es aliasing, que se arregla con MSAA.
+    aperture = 0.00016,
+    maxblur = 0.011,
   } = options;
 
   const size = renderer.getSize(new Vector2());
-
   const composer = new EffectComposer(renderer);
   // HalfFloat mantiene el rango HDR necesario para que el bloom no se recorte.
   composer.renderTarget1.texture.type = HalfFloatType;
   composer.renderTarget2.texture.type = HalfFloatType;
+
+  /**
+   * MSAA explicito en los render targets del composer.
+   *
+   * `antialias: true` en el WebGLRenderer solo afecta al framebuffer por
+   * defecto, que el composer esquiva por completo: todo se renderiza a un
+   * render target. Sin esto, cada arista sale con aliasing: eso es el
+   * "pixelado", y no tiene nada que ver con el DOF.
+   */
+  const samples = renderer.capabilities.isWebGL2 ? 4 : 0;
+  composer.renderTarget1.samples = samples;
+  composer.renderTarget2.samples = samples;
 
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);

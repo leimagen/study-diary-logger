@@ -353,11 +353,22 @@ export async function upgradeWithComfy(materials) {
 
       map.wrapS = RepeatWrapping;
       map.wrapT = RepeatWrapping;
+      // Sin esto la textura se estira sobre toda la superficie y el detalle se
+      // magnifica hasta quedar liso: parecia que la textura desaparecia.
+      map.repeat.set(spec.repeat ?? 1, spec.repeat ?? 1);
       map.colorSpace = SRGBColorSpace;
       map.anisotropy = 8;
 
       // Derivar relieve y rugosidad a partir del albedo ya espejado.
       const { normalMap, roughnessMap } = deriveMaps(tiled, key);
+      // Los mapas derivados nacen con repeat 1: hay que igualarlos al del
+      // albedo o el relieve quedaria estirado sobre toda la superficie.
+      for (const t of [normalMap, roughnessMap]) {
+        t.wrapS = RepeatWrapping;
+        t.wrapT = RepeatWrapping;
+        t.repeat.set(spec.repeat ?? 1, spec.repeat ?? 1);
+        t.anisotropy = 8;
+      }
 
       material.map = map;
       material.normalMap = normalMap;
@@ -446,10 +457,10 @@ function deriveMaps(image, key) {
 
 /** Qué fichero de public/textures mapea a cada material. */
 const COMFY_MAPS = {
-  floor: { file: 'floor_metal.png', flip: 1 },
-  wall: { file: 'wall_panel.png', flip: 1 },
-  pillar: { file: 'pillar_metal.png', flip: 1 },
-  panel: { file: 'panel_dark.png', flip: 1 },
+  floor: { file: 'floor_metal.png', flip: 1, repeat: 16 },
+  wall: { file: 'wall_panel.png', flip: 1, repeat: 8 },
+  pillar: { file: 'pillar_metal.png', flip: 1, repeat: 3 },
+  panel: { file: 'panel_dark.png', flip: 1, repeat: 2 },
 };
 
 /** Libera las texturas cacheadas (llamar en `dispose`). */

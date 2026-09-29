@@ -18,6 +18,7 @@ import {
 const VERTEX = /* glsl */ `
   attribute float aSize;
   attribute float aLife;
+  attribute float aAge;
   attribute vec3 aColor;
 
   varying float vLife;
@@ -27,8 +28,13 @@ const VERTEX = /* glsl */ `
     vLife = aLife;
     vColor = aColor;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    // Las partículas se encogen al morir y crecen al nacer.
-    float grow = smoothstep(0.0, 0.15, aLife) * (1.0 - smoothstep(0.6, 1.0, 1.0 - aLife));
+
+    // Aparicion gradual. Sin esto el polvo amanece de golpe en el aire; con
+    // esto entra como una suspension que se va formando.
+    float fadeIn = smoothstep(0.0, 0.9, aAge);
+    // Las particulas se encogen al morir y crecen al nacer.
+    float grow = fadeIn * (1.0 - smoothstep(0.6, 1.0, 1.0 - aLife));
+
     gl_PointSize = aSize * grow * (300.0 / max(0.001, -mvPosition.z));
     gl_Position = projectionMatrix * mvPosition;
   }
@@ -64,11 +70,11 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   const colors = new Float32Array(capacity * 3);
   const sizes = new Float32Array(capacity);
   const lives = new Float32Array(capacity); // 0 = muerta, 1 = recién nacida
+  const ages = new Float32Array(capacity); // segundos vividos: usada por el fade-in
 
   // Buffers de integración en CPU (no subidos a GPU).
   const velocities = new Float32Array(capacity * 3);
   const maxLifes = new Float32Array(capacity);
-  const ages = new Float32Array(capacity);
   const drag = new Float32Array(capacity);
   const gravity = new Float32Array(capacity);
 
@@ -82,6 +88,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   geometry.setAttribute('aColor', new BufferAttribute(colors, 3));
   geometry.setAttribute('aSize', new BufferAttribute(sizes, 1));
   geometry.setAttribute('aLife', new BufferAttribute(lives, 1));
+  geometry.setAttribute('aAge', new BufferAttribute(ages, 1));
 
   const material = new ShaderMaterial({
     vertexShader: VERTEX,
@@ -273,6 +280,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
       geometry.attributes.aColor.needsUpdate = true;
       geometry.attributes.aSize.needsUpdate = true;
       geometry.attributes.aLife.needsUpdate = true;
+      geometry.attributes.aAge.needsUpdate = true;
     }
   }
 

@@ -12,8 +12,6 @@ import {
   AdditiveBlending,
   BackSide,
   BoxGeometry,
-  BufferAttribute,
-  BufferGeometry,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -21,12 +19,11 @@ import {
   FogExp2,
   Group,
   HemisphereLight,
-  LineBasicMaterial,
-  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PointLight,
+  RectAreaLight,
   RingGeometry,
   SphereGeometry,
   TorusGeometry,
@@ -216,25 +213,6 @@ function createCeilingRings({ count = 3, radius = [6, 10, 14], y = 11, color = 0
   return { group, rings };
 }
 
-/** Circuitos luminosos incrustados en el suelo. */
-function createCircuits({ color = 0x2ad4ff, hubCount = 8 } = {}) {
-  const positions = [];
-  for (let i = 0; i < hubCount; i++) {
-    const a1 = (i / hubCount) * Math.PI * 2;
-    const a2 = ((i + 1) / hubCount) * Math.PI * 2;
-    positions.push(Math.cos(a1) * 6.5, 0.03, Math.sin(a1) * 6.5);
-    positions.push(Math.cos(a1) * 13.5, 0.03, Math.sin(a1) * 13.5);
-    positions.push(Math.cos(a1) * 13.5, 0.03, Math.sin(a1) * 13.5);
-    positions.push(Math.cos(a2) * 13.5, 0.03, Math.sin(a2) * 13.5);
-  }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-  return new LineSegments(
-    geometry,
-    new LineBasicMaterial({ color, transparent: true, opacity: 0.55 }),
-  );
-}
-
 /**
  * Consolas y cajas: mobiliario que da escala y puntos de apoyo visual.
  * Sin ellos la sala es un suelo y un techo: no hay dónde mirar.
@@ -314,26 +292,18 @@ function createProps() {
   return { group, material: bodyMat };
 }
 
-/** Conduitos y cableado colgando del techo: detalle secundario pero vende la escala. */
-function createPipes() {
-  const group = new Group();
-  const mat = new MeshStandardMaterial({
-    color: 0x3a4c56,
-    roughness: 0.45,
-    metalness: 0.95,
-    envMapIntensity: 1.3,
-  });
-
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const pipe = new Mesh(new CylinderGeometry(0.09, 0.09, 18, 10), mat);
-    pipe.position.set(Math.cos(angle) * 12, 9, Math.sin(angle) * 12);
-    pipe.rotation.z = 0.12 * Math.cos(angle);
-    pipe.rotation.x = 0.12 * Math.sin(angle);
-    pipe.castShadow = true;
-    group.add(pipe);
-  }
-  return group;
+/**
+ * Luz deArea sobre el reactor: el foco de museo.
+ *
+ * Un RectAreaLight da una luz suave y con forma, imposible con un PointLight.
+ * Es lo que convierte el reactor en "objeto milenario exhibited en el centro".
+ */
+function createSpotlightRig() {
+  const light = new RectAreaLight(0xdff2ff, 22, 7, 7);
+  light.position.set(0, 11.5, 0);
+  // Mira hacia abajo: el reactor queda bajo el cono.
+  light.lookAt(0, 0, 0);
+  return { light };
 }
 
 /* ------------------------------------------------------------------ */
@@ -349,23 +319,28 @@ export function createEnvironment(scene) {
   const { group: pillarGroup, material: pillarMat } = createPillars();
   const ceiling = createCeiling();
   const { group: rings, rings: ringMeshes } = createCeilingRings();
-  const circuits = createCircuits();
   const { group: props, material: panelMat } = createProps();
-  const pipes = createPipes();
 
-  group.add(floorGroup, dome, pillarGroup, ceiling, rings, circuits, props, pipes);
+  // Fuera createCircuits() y createPipes(): el octogono cian del suelo no
+  // estaba alineado con las torres de materia y las barras inclinadas del
+  // techo no aportaban nada. decided que sobraban, no estaban escaladas.
+
+  group.add(floorGroup, dome, pillarGroup, ceiling, rings, props);
   scene.add(group);
 
   // Iluminacion.
   // El hemisférico da la base (cielo frío / suelo oscuro); sin él, las caras
   // no iluminadas son negro puro y la escena pierde volumen.
-  const ambient = new HemisphereLight(0x5aa8d0, 0x0a1218, 0.35);
+  const ambient = new HemisphereLight(0x4a86ad, 0x080f16, 0.18);
   scene.add(ambient);
 
-  // Intensidades en candelas (Three usa unidades físicas): con PBR + mapa de
-  // entorno, valores en decenas saturan la imagen. Subir de golpe.
-  const keyLight = new PointLight(0xbfefff, 26, 44, 2);
-  keyLight.position.set(0, 10, 0);
+  // Foco de museo sobre el reactor. Es la luz protagonist: el resto se
+  // atenua para que el objeto central domine y la sala caiga en penumbra.
+  const { light: showcase } = createSpotlightRig();
+  scene.add(showcase);
+
+  const keyLight = new PointLight(0xbfefff, 10, 34, 2);
+  keyLight.position.set(0, 8, 0);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(1024, 1024);
   keyLight.shadow.camera.near = 0.5;
@@ -373,16 +348,17 @@ export function createEnvironment(scene) {
   keyLight.shadow.bias = -0.002;
   scene.add(keyLight);
 
-  const accentLight = new PointLight(0xff6ad5, 14, 26, 2);
-  accentLight.position.set(-10, 3.2, -9);
+  // Acentos de color en los extremos: rompen la penumbra sin iluminar el centro.
+  const accentLight = new PointLight(0xff6ad5, 9, 20, 2);
+  accentLight.position.set(-11, 2.6, -10);
   scene.add(accentLight);
 
-  const fillLight = new PointLight(0x2a7fff, 10, 32, 2);
-  fillLight.position.set(11, 5, 9);
+  const fillLight = new PointLight(0x2a7fff, 6, 24, 2);
+  fillLight.position.set(12, 4, 10);
   scene.add(fillLight);
 
   // Luz rasante desde atrás: define los bordes de las columnas y las cajas.
-  const rimLight = new DirectionalLight(0x7fd4ff, 0.7);
+  const rimLight = new DirectionalLight(0x7fd4ff, 0.45);
   rimLight.position.set(-9, 13, -17);
   rimLight.target.position.set(0, 0, 0);
   scene.add(rimLight, rimLight.target);
@@ -413,9 +389,11 @@ export function createEnvironment(scene) {
       });
 
       const pulse = 1 + Math.sin(time * 2.2) * 0.06 + Math.min(streak, 10) * 0.04;
-      keyLight.intensity = 26 * pulse;
-      accentLight.intensity = 14 * (1 + Math.sin(time * 1.3 + 1.2) * 0.12);
-      rimLight.intensity = 0.7 * (1 + Math.sin(time * 0.7) * 0.05);
+      keyLight.intensity = 10 * pulse;
+      accentLight.intensity = 9 * (1 + Math.sin(time * 1.3 + 1.2) * 0.12);
+      rimLight.intensity = 0.45 * (1 + Math.sin(time * 0.7) * 0.05);
+      // El foco de museo late muy despacio: dramatismo, no discoteca.
+      showcase.intensity = 22 * (1 + Math.sin(time * 0.5) * 0.04);
     },
   };
 }

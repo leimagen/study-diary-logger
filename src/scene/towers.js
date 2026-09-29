@@ -10,6 +10,7 @@ import {
   AdditiveBlending,
   Color,
   CylinderGeometry,
+  CircleGeometry,
   DoubleSide,
   Group,
   Mesh,
@@ -69,18 +70,23 @@ const TOWER_FRAG = /* glsl */ `
     float filled = step(vUv.y, uFill);
 
     vec3 color = uColor;
-    color += uColor * band * 0.45;
-    color += vec3(1.0) * segments * 0.07;
-    color *= 0.5 + fresnel * 0.7 + uEnergy * 0.2;
+    color += uColor * band * 0.30;
+    color += vec3(1.0) * segments * 0.05;
+    color *= 0.45 + fresnel * 0.55 + uEnergy * 0.15;
 
-    // El tubo es translúcido en TODA su altura: si la parte vacía se apaga, la
-    // torre se lee como un vaso abierto en vez de una columna de medición.
-    // uFill solo aporta brillo, no cambia la opacidad.
-    float alpha = (0.20 + fresnel * 0.30 + band * 0.18 + segments * 0.05)
-                  * (0.65 + filled * 0.35) * (0.75 + uEnergy * 0.25);
-    color += uColor * filled * 0.35;
+    // Opacidad contenida a proposito. Con blending aditivo y alfa alta el
+    // color se lava a pastel y la torre parece un cubo de plastico: el
+    // termino "filled" ademas lo saturaba hasta el blanco.
+    float glass = 0.16 + fresnel * 0.30 + band * 0.14 + segments * 0.05;
+    float fill  = 0.30 + fresnel * 0.38 + band * 0.18;
+    float alpha = mix(glass, fill, filled) * (0.55 + uEnergy * 0.25);
 
-    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.62));
+    // El color se mantiene en el tono de la materia: se oscurece en el
+    // interior en vez de saturarse a blanco.
+    color = mix(color * 0.55, color, filled);
+    color += vec3(1.0) * band * 0.12;
+
+    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.5));
   }
 `;
 
@@ -93,6 +99,12 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
   // cónico y cada barra parece una campana en vez de un tubo de medición.
   const geometry = new CylinderGeometry(0.46, 0.46, 1, 28, 1, true);
   geometry.translate(0, 0.5, 0); // origen en la base para escalar en Y
+
+  // Tapa: sin ella el DoubleSide deja ver la pared interior y la torre se lee
+  // como un cubo abierto. Material simple, sin uFill: con el shader de la
+  // barra el disco mostraria un corte tipo porcion de pizza.
+  const capGeometry = new CircleGeometry(0.46, 28);
+  capGeometry.rotateX(-Math.PI / 2);
 
   function createTower(subject, index, stats) {
     const color = colorFor(index);
@@ -115,10 +127,21 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
     const holder = new Group();
     holder.add(mesh);
 
-    // Tapa: cierra el tubo y marca la altura máxima alcanzada.
-    // Sin tapa: con DoubleSide el tubo ya se ve cerrado desde cualquier ángulo.
-    // Un disco con el shader de la barra mostraría un corte tipo "porción de
-    // pizza", porque uFill se evalúa sobre vUv.y.
+    // Tapa superior en el color de la materia, con material simple: usar el
+    // shader de la barra haria que el disco mostrara un corte tipo porcion
+    // de pizza, porque uFill se evalua sobre vUv.y.
+    const cap = new Mesh(
+      capGeometry,
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.38,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    holder.add(cap);
 
     // Anillo de base: marca la posición sin dominar la torre.
     const base = new Mesh(
@@ -146,7 +169,7 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
     holder.rotation.y = -angle;
 
     group.add(holder);
-    return { holder, mesh, material, base, label, index, color, currentHeight: 0, targetHeight: 0 };
+    return { holder, mesh, material, base, cap, label, index, color, currentHeight: 0, targetHeight: 0 };
   }
 
   /**
@@ -209,6 +232,8 @@ export function createSubjectTowers({ maxSubjects = 10, radius = 10.5 } = {}) {
     for (const tower of towers.values()) {
       tower.currentHeight += (tower.targetHeight - tower.currentHeight) * Math.min(1, dt * 3);
       tower.mesh.scale.y = tower.currentHeight;
+      // La tapa sigue a la punta del tubo, que está escalada en Y.
+      tower.cap.position.y = tower.currentHeight;
       tower.material.uniforms.uTime.value = time * 0.6 + tower.index;
       tower.label.position.set(0, tower.currentHeight + 0.55, 0);
       // La etiqueta siempre mira a cámara: los sprites ya lo hacen solos.
