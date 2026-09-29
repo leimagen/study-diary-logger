@@ -1,4 +1,6 @@
-# Laboratorio de Estudio
+# study-diary-logger
+
+## Laboratorio de Estudio
 
 Diario de estudio gamificado dentro de un laboratorio 3D futurista. Registras
 cada sesión de estudio y la escena reacciona: el reactor late más fuerte con tu
