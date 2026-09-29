@@ -171,7 +171,7 @@ la pantalla de toasts. Se añadió tope de 4 simultáneos en `hud.js`.
 ### Error propio: PowerShell corrompió la codificación
 
 Al insertar una línea de diagnóstico con `[System.IO.File]::WriteAllLines` se
-destrozó el UTF-8 de `lab.js` (`geometría` → `geometr??a`, `cámara` → `cÃ¡mara`).
+destrozo el UTF-8 de `lab.js` (`geometria` con acento -> `geometr??a`, `camara` con acento -> `cÃ¡mara`).
 El síntoma fue desconcertante: errores como «`renderer` is undefined» y
 «`console` is undefined» **dentro de una función**, cuando ambos eran globales
 válidos. La causa era un comentario partido que dejaba una cadena suelta.
@@ -182,4 +182,79 @@ de edición, que respeta UTF-8.
 
 **Lección: no usar PowerShell `WriteAllLines` / `Set-Content` para tocar ficheros
 de código con acentos en este proyecto.**
+
+### El usuario es diseñador gráfico
+
+Corrijo terminología y hay que respetarla. Señaló que diferenciaba «pixelado» de
+«borroso» y tenía razón: yo estaba confundiendo aliasing con desenfoque y por
+eso había rebajado el DOF que le gustaba. Cuando use vocabulario visual,
+comprobar antes de asumir.
+
+### Aliasing, no blur (el bug real del pixelado)
+
+`new EffectComposer(renderer)` crea los render targets con `samples: 0`. El
+`antialias: true` del renderer solo afecta al framebuffer por defecto, que el
+composer esquiva por completo. Todo se renderizaba sin multisampling. El DOF
+no tiene nada que ver. MSAA a 4x en ambos render targets.
+
+### Diagnósticos que salieron mal
+
+Dos correcciones de rumbo, ambas por affirmar sin verificar:
+
+1. **La textura del suelo «desaparecía».** Medí el material cada 400 ms: estable.
+   Concluí que era la capa emisiva. Estaba mal: la textura no desaparecía, se
+   sustituía por una **peor**. La procedural dibuja una rejilla de placas con
+   juntas; la generada por ComfyUI solo tiene cepillado vertical. Ahora el suelo
+   **no** se sustituye: la procedural gana en pantalla.
+2. **El «atardecer» en el suelo.** Lo atribuí a la IBL y la apagué. No era: con
+   `metalness 0.85` el suelo es casi un espejo y el foco genera un lóbulo
+   especular enorme en ángulo rasante. Se ve solo desde ciertos ángulos, y por
+   eso la sala «no parecía oscura». Bajado a `metalness 0.22` / `roughness 0.88`.
+
+### La IBL casi nunca es la culpable
+
+`RoomEnvironment` es una sala **blanca**. En metal con Fresnel, cualquier resto
+de IBL se multiplica hacia 1 en ángulo rasante. `environmentIntensity` está a 0
+y no se va a subir: la única fuente es el foco.
+
+### Un `Reflector` grande produce artefactos, uno pequeño no
+
+El charco de 26×26 devolvía imágenes **nítidas** de los aros del techo en forma
+de franjas duras cruzando el suelo. Bajar la intensidad solo lo atenuaba: un
+espejo no difunde. La solución fue cambiar de estrategia: el pavimento mojado lo
+hace el **motor PBR** con rugosidad variable (`wetLabFloor()`), y el `Reflector`
+se reservó para un círculo pequeño (la fuente), donde el reflejo nítido del
+reactor es justo lo que se quiere.
+
+### GLSL: tres fallos propios
+
+- **Un bloque `{ }` no es una expresión.** Envolver una deformación de UVs en
+  llaves rompe la compilación: hay que calcular el valor antes.
+- El `Reflector` ya declara `base` y `vUv` es `vec4` proyectado (usar `xy/w`).
+  Redeclarar `base` da `'base' : redefinition`.
+- Un shader roto **no lanza error visible**: deja el objeto como un disco
+  oscuro. Solo se ve en la consola. Mirar siempre la consola tras tocar shaders.
+
+### Estado visual al cerrar
+
+Lucha cuerpo a cuerpo con la iluminación, ganada. Sala a oscuras con un único
+foco de museo (panel suspendido + `SpotLight` con cono), torres como vidrio
+oscuro con filo luminoso que **iluminan de verdad** (`PointLight` propia por
+torre), pavimento mojado irregular por PBR, y fuente bajo el reactor con
+oleaje y reflejo real.
+
+Limpieza acumulada: fuera los aros del techo (salían casi siempre como franjas
+reflejadas), las barras inclinadas, el octógono, las vigas, el cono de luz y la
+capa emisiva del suelo.
+
+### Pendiente
+
+- **Anillos del techo**: siguen reflejándose en el pavimento. Están en el borde
+  de lo aceptable; si molestan, quitarlos también.
+- **El agua es un espejo casi perfecto.** El objetivo de pavimento mojado real
+  pediría difuminar el reflejo con la rugosidad, no solo con normales.
+- **Backend**: `storage.js` aislado tras `load`/`save`/`import`/`export`.
+- **Edición de sesiones**: `store.updateSession` existe; la UI solo añade y
+  borra.
+
 
