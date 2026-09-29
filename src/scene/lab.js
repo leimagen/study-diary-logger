@@ -28,7 +28,7 @@ import { disposeTextures, upgradeWithComfy } from './textures.js';
 import { createReactor } from './reactor.js';
 import { createSparkSystem } from './particles.js';
 import { createSubjectTowers } from './towers.js';
-import { createWaterPuddle } from './water.js';
+import { createFountain } from './water.js';
 import { createAchievementPedestals } from './pedestals.js';
 import { ACHIEVEMENTS } from '../core/gamification.js';
 
@@ -106,9 +106,9 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   const reactor = createReactor();
   scene.add(reactor.group);
 
-  // Charco de agua bajo el reactor: refleja de verdad la escena, y con el
-  // foco de museo encima el reflejo del reactor es el punto focal.
-  const puddle = createWaterPuddle({ size: 26 });
+  // Fuente bajo el reactor: reflejo real en un circulo pequeno. El pavement
+  // mojado del resto lo hace el motor PBR con rugosidad variable.
+  const puddle = createFountain({ radius: 3.4 });
   scene.add(puddle.group);
 
   const sparks = createSparkSystem({ capacity: 1600 });

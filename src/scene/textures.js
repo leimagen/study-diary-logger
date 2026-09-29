@@ -268,6 +268,91 @@ export function labFloor({ size = 1024, repeat = 10, seed = 21 } = {}) {
 }
 
 /**
+ * Pavimento mojado: las mismas placas, pero con bolsas de agua.
+ *
+ * La clave del efecto: en las zonas mojadas la rugosidad cae a ~0.05 y el
+ * relieve se deforma con ondas. Es el motor PBR el que refleja las luces,
+ * no un espejo: un Reflector grande devolvia imagenes nitidas de los aros del
+ * techo en forma de franjas duras cruzando el suelo, que es justo lo que
+ * quiero evitar. Con rugosidad variable el reflejo se difunde y se rompe en
+ * brillos suaves, como el agua real.
+ */
+export function wetLabFloor({ size = 1024, repeat = 10, seed = 21, wetSeed = 19 } = {}) {
+  const key = `wetfloor-${size}-${seed}-${wetSeed}`;
+  if (cache.has(key)) return cache.get(key);
+
+  const noise = valueNoise(seed);
+  const wetNoise = valueNoise(wetSeed);
+  const { canvas, ctx } = surface(size);
+  const { canvas: roughCanvas, ctx: roughCtx } = surface(size);
+  const rough = roughCtx.createImageData(size, size);
+  const height = new Float32Array(size * size);
+
+  const cell = size / 4;
+  const joint = size * 0.006;
+
+  const img = ctx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * 8;
+      const v = (y / size) * 8;
+      const grain = fbm(noise, u, v, 5);
+      const wear = Math.max(0, fbm(noise, u * 0.35, v * 0.35, 3)) * 0.6;
+
+      const gx = Math.min(x % cell, cell - (x % cell));
+      const gy = Math.min(y % cell, cell - (y % cell));
+      const isJoint = Math.min(gx, gy) < joint;
+
+      const plateX = Math.floor(x / cell);
+      const plateY = Math.floor(y / cell);
+      const plateTone = (valueNoise(seed + plateX * 31 + plateY * 17)(plateX * 0.7, plateY * 0.3) + 1) / 2;
+
+      // Mojadez: cuencas anchas + detalle fino, con contraste fuerte para que
+      // queden bolsas definidas y mucho suelo seco entre ellas.
+      const wu = (x / size) * 3.2;
+      const wv = (y / size) * 3.2;
+      let wn = fbm(wetNoise, wu, wv, 5) * 0.5 + 0.5;
+      wn = wn * 0.78 + (fbm(wetNoise, wu * 5, wv * 5, 4) * 0.5 + 0.5) * 0.22;
+      const wet = Math.max(0, Math.min(1, (wn - 0.44) / 0.3));
+
+      // El agua se ennegrece el pavement y lo satura.
+      const base = (0.10 + plateTone * 0.035 + grain * 0.03 + wear * 0.05) * (1 - wet * 0.45);
+      const i = (y * size + x) * 4;
+      const c = isJoint ? base * 0.35 : base;
+      img.data[i] = c * 255 * 1.0;
+      img.data[i + 1] = c * 255 * 1.08;
+      img.data[i + 2] = c * 255 * 1.2;
+      img.data[i + 3] = 255;
+
+      // Aqui esta el efecto: rugosidad alta en seco, espejo en el charco.
+      const dry = isJoint ? 0.95 : 0.35 + wear * 0.4 + Math.abs(grain) * 0.2;
+      const r = dry * (1 - wet) + 0.05 * wet;
+      const value = Math.min(1, Math.max(0, r)) * 255;
+      rough.data[i] = value;
+      rough.data[i + 1] = value;
+      rough.data[i + 2] = value;
+      rough.data[i + 3] = 255;
+
+      // Ondas: solo dentro del agua, para que el seco quede mate.
+      const ripple = wet > 0 ? fbm(wetNoise, u * 9 + 31, v * 9, 3) * 0.55 * wet : 0;
+      height[y * size + x] = (isJoint ? -1 : grain * 0.25 + wear * 0.15) + ripple;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  roughCtx.putImageData(rough, 0, 0);
+
+  const result = {
+    map: finish(canvas, { repeat, srgb: true }),
+    roughnessMap: finish(roughCanvas, { repeat }),
+    normalMap: finish(normalFromHeight(height, size, 2.6), { repeat }),
+  };
+  cache.set(key, result);
+  return result;
+}
+
+/**
  * Panel de pared con juntas horizontales y tornillos.
  * Principalmente aporta rugosidad y relieve; el color va en el material.
  */

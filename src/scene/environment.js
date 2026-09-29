@@ -28,7 +28,7 @@ import {
   SpotLight,
   TorusGeometry,
 } from 'three';
-import { metalSurface, labFloor, wallPanels } from './textures.js';
+import { metalSurface, wetLabFloor, wallPanels } from './textures.js';
 
 /* ------------------------------------------------------------------ */
 /* Suelo                                                              */
@@ -42,7 +42,7 @@ import { metalSurface, labFloor, wallPanels } from './textures.js';
  * holográfico" sin renunciar a la superficie física.
  */
 function createFloor({ radius = 44 } = {}) {
-  const { map, roughnessMap, normalMap } = labFloor({ repeat: 14 });
+  const { map, roughnessMap, normalMap } = wetLabFloor({ repeat: 14 });
 
   const material = new MeshStandardMaterial({
     map,
@@ -56,8 +56,8 @@ function createFloor({ radius = 44 } = {}) {
      * aunque no haya mas luces. El brillo mojado lo aporta la capa de agua,
      * que si es reflectante de verdad.
      */
-    roughness: 0.88,
-    metalness: 0.22,
+    roughness: 1.0,
+    metalness: 0.55,
     envMapIntensity: 0.2,
   });
 
@@ -273,75 +273,6 @@ function createProps() {
  * es donde el rayo de la camara atraviesa mas medio, que es como se comporta
  * un volumen real.
  */
-function createLightShaft({ top = 1.5, bottom = 5.2, height = 11.5, color = 0xbfe4ff } = {}) {
-  const geometry = new CylinderGeometry(top, bottom, height, 48, 1, true);
-  geometry.translate(0, -height / 2, 0);
-
-  const material = new ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: AdditiveBlending,
-    side: DoubleSide,
-    uniforms: {
-      uColor: { value: new Color(color) },
-      uHeight: { value: height },
-      uStrength: { value: 0.05 },
-    },
-    vertexShader: /* glsl */ `
-      varying vec2 vUv;
-      varying vec3 vNormalV;
-      varying vec3 vViewDir;
-      void main() {
-        vUv = uv;
-        vNormalV = normalize(normalMatrix * normal);
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vViewDir = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uColor;
-      uniform float uHeight;
-      uniform float uStrength;
-      varying vec2 vUv;
-      varying vec3 vNormalV;
-      varying vec3 vViewDir;
-
-      void main() {
-        // vUv.y = 1 en el panel, 0 en el suelo.
-        float top = smoothstep(1.0, 0.55, vUv.y);
-        float bottom = smoothstep(0.0, 0.55, vUv.y);
-        float fade = top * bottom;
-
-        // Densidad: maxima donde el rayo atraviesa mas cono.
-        float grazing = 1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir)));
-        float density = pow(grazing, 2.2);
-
-        // Ruido suave para que no se lea como un solido.
-        float shimmer = 0.85 + 0.15 * sin(vUv.y * 18.0 + vUv.x * 6.0);
-
-        float alpha = fade * density * uStrength * shimmer;
-        gl_FragColor = vec4(uColor, alpha);
-      }
-    `,
-  });
-
-  const mesh = new Mesh(geometry, material);
-  mesh.position.y = height;
-  mesh.renderOrder = 2;
-  return mesh;
-}
-
-/**
- * Foco de museo: panel suspendido sobre el reactor.
- *
- * Es un SpotLight, no un RectAreaLight. El area light ilumina en todas
- * direcciones sin cono, y con 17x17 se desbordaba por el suelo como un
- * manchon blanco. El foco da exactamente la referencia: cono suave desde un
- * panel pequeño, con la sala alrededor en penumbra.
- *
- * @returns {{spot: SpotLight, spotTarget: Object3D, panel: Mesh, glow: Mesh, shaft: Mesh}}
- */
 function createSpotlightRig() {
   const spot = new SpotLight(0xdff2ff, 260, 26, 0.42, 0.75, 1.6);
   spot.position.set(0, 11.5, 0);
@@ -370,8 +301,7 @@ function createSpotlightRig() {
   glow.rotation.x = Math.PI / 2;
   glow.position.set(0, 11.5, 0);
 
-  const shaft = createLightShaft();
-  return { spot, spotTarget: spot.target, panel, glow, shaft };
+  return { spot, spotTarget: spot.target, panel, glow };
 }
 
 /* ------------------------------------------------------------------ */
@@ -402,7 +332,7 @@ export function createEnvironment(scene) {
   // fuentes, sin anadir luces reales que la desperdicie.
   const rig = createSpotlightRig();
   const showcase = rig.spot;
-  scene.add(showcase, rig.spotTarget, rig.panel, rig.glow, rig.shaft);
+  scene.add(showcase, rig.spotTarget, rig.panel, rig.glow);
 
   // Un minimo de rebote: sin nada, las caras no iluminadas son negro puro y
   // los objetos pierden volumen. 0.07 todavia se notaba en la union del
