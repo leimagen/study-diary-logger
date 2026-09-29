@@ -49,11 +49,16 @@ function createFloor({ radius = 44 } = {}) {
     roughnessMap,
     normalMap,
     color: 0x3c5a72,
-    roughness: 0.62,
-    metalness: 0.85,
-    // Con 1.1 el mapa de entorno (RoomEnvironment es muy claro) inundaba el
-    // suelo de blanco y lo dejaba plano. Por debajo de 0.5 se ve el metal.
-    envMapIntensity: 0.45,
+    /**
+     * Metalness baja y roughness alta a proposito. Con metalness 0.85 el
+     * suelo es casi un espejo: el foco genera un lobulo especular enorme en
+     * angulo rasante que se ve como un atardecer y deja media imagen encendida
+     * aunque no haya mas luces. El brillo mojado lo aporta la capa de agua,
+     * que si es reflectante de verdad.
+     */
+    roughness: 0.88,
+    metalness: 0.22,
+    envMapIntensity: 0.2,
   });
 
   // Sin capa emisiva encima. Cuando el suelo era un shader plano esto le
@@ -153,25 +158,6 @@ function createPillars({ count = 6, radius = 24, height = 9 } = {}) {
     group.add(pillar);
   }
   return { group, material: baseMat };
-}
-
-/** Vigas del techo: dan techo real y sombras proyectadas. */
-function createCeiling({ radius = 22, y = 12, count = 5 } = {}) {
-  const group = new Group();
-  const mat = new MeshStandardMaterial({
-    color: 0x22333e,
-    roughness: 0.6,
-    metalness: 0.85,
-  });
-
-  for (let i = 0; i < count; i++) {
-    const z = -radius + ((i + 0.5) / count) * radius * 2;
-    const beam = new Mesh(new BoxGeometry(radius * 2, 0.5, 0.45), mat);
-    beam.position.set(0, y + (i % 2) * 0.7, z);
-    beam.castShadow = true;
-    group.add(beam);
-  }
-  return group;
 }
 
 /** Anillos de techo que giran: detalle de la atmosphere. */
@@ -299,7 +285,7 @@ function createLightShaft({ top = 1.5, bottom = 5.2, height = 11.5, color = 0xbf
     uniforms: {
       uColor: { value: new Color(color) },
       uHeight: { value: height },
-      uStrength: { value: 0.085 },
+      uStrength: { value: 0.05 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -323,13 +309,13 @@ function createLightShaft({ top = 1.5, bottom = 5.2, height = 11.5, color = 0xbf
 
       void main() {
         // vUv.y = 1 en el panel, 0 en el suelo.
-        float top = smoothstep(1.0, 0.72, vUv.y);
-        float bottom = smoothstep(0.0, 0.35, vUv.y);
+        float top = smoothstep(1.0, 0.55, vUv.y);
+        float bottom = smoothstep(0.0, 0.55, vUv.y);
         float fade = top * bottom;
 
         // Densidad: maxima donde el rayo atraviesa mas cono.
         float grazing = 1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir)));
-        float density = pow(grazing, 1.4);
+        float density = pow(grazing, 2.2);
 
         // Ruido suave para que no se lea como un solido.
         float shimmer = 0.85 + 0.15 * sin(vUv.y * 18.0 + vUv.x * 6.0);
@@ -401,7 +387,6 @@ export function createEnvironment(scene) {
   const { group: floorGroup, mesh: floorMesh, material: floorMat } = createFloor();
   const dome = createDome();
   const { group: pillarGroup, material: pillarMat } = createPillars();
-  const ceiling = createCeiling();
   const { group: rings, rings: ringMeshes } = createCeilingRings();
   const { group: props, material: panelMat } = createProps();
 
@@ -409,7 +394,7 @@ export function createEnvironment(scene) {
   // estaba alineado con las torres de materia y las barras inclinadas del
   // techo no aportaban nada. decided que sobraban, no estaban escaladas.
 
-  group.add(floorGroup, dome, pillarGroup, ceiling, rings, props);
+  group.add(floorGroup, dome, pillarGroup, rings, props);
   scene.add(group);
 
   // 唯一 fuente real: el foco suspendido sobre el reactor. Las torres y las
