@@ -337,20 +337,27 @@ export async function upgradeWithComfy(materials) {
   const loader = new TextureLoader();
 
   for (const [key, material] of Object.entries(materials)) {
-    const file = COMFY_MAPS[key];
-    if (!file || !material) continue;
-    const url = `textures/${file}`;
+    const spec = COMFY_MAPS[key];
+    if (!spec || !material) continue;
+    const url = `textures/${spec.file}`;
     if (!(await exists(url))) continue;
 
     try {
       const map = await loader.loadAsync(url);
+      // Cualquier textura generada por IA tiene bordes que no encajan. El
+      // espejado garantiza que la superficie es tileable sin depender de que
+      // el modelo acierte: en un material con grano la simetria no se percibe.
+      const tiled = mirrorTile(map.image, spec.flip ? 2 : 1);
+      map.image = tiled;
+      map.needsUpdate = true;
+
       map.wrapS = RepeatWrapping;
       map.wrapT = RepeatWrapping;
       map.colorSpace = SRGBColorSpace;
       map.anisotropy = 8;
 
-      // Derivar relieve y rugosidad a partir del albedo.
-      const { normalMap, roughnessMap } = deriveMaps(map.image, key);
+      // Derivar relieve y rugosidad a partir del albedo ya espejado.
+      const { normalMap, roughnessMap } = deriveMaps(tiled, key);
 
       material.map = map;
       material.normalMap = normalMap;
@@ -363,6 +370,36 @@ export async function upgradeWithComfy(materials) {
   }
 
   return updated;
+}
+
+/**
+ * Espeja la imagen en espejo Siegel para que sea tileable.
+ *
+ * `w` y `h` son divisores: la textura se repite 2x, 3x... creando un patron
+ * periodico. Con material de grano (metal, chapa) la simetria pasa
+ * desapercibida; sin ella, la costura de la IA se ve a simple vista.
+ */
+function mirrorTile(image, divisions = 2) {
+  const w = image.width;
+  const h = image.height;
+  const out = document.createElement('canvas');
+  out.width = w * divisions;
+  out.height = h * divisions;
+  const ctx = out.getContext('2d');
+
+  for (let y = 0; y < divisions; y++) {
+    for (let x = 0; x < divisions; x++) {
+      // Alternar el espejo en cada eje produce una simetria de piso, no de
+      // unas Sims, que es lo que hace que el resultado parezca una baldosa.
+      ctx.save();
+      ctx.translate(x * w, y * h);
+      ctx.scale(x % 2 === 0 ? 1 : -1, y % 2 === 0 ? 1 : -1);
+      ctx.translate(x % 2 === 0 ? 0 : -w, y % 2 === 0 ? 0 : -h);
+      ctx.drawImage(image, 0, 0);
+      ctx.restore();
+    }
+  }
+  return out;
 }
 
 /** Deriva normal + rugosidad de una imagen de albedo ya cargada. */
@@ -409,10 +446,10 @@ function deriveMaps(image, key) {
 
 /** Qué fichero de public/textures mapea a cada material. */
 const COMFY_MAPS = {
-  floor: 'floor_metal.png',
-  wall: 'wall_panel.png',
-  pillar: 'pillar_metal.png',
-  panel: 'panel_dark.png',
+  floor: { file: 'floor_metal.png', flip: 1 },
+  wall: { file: 'wall_panel.png', flip: 1 },
+  pillar: { file: 'pillar_metal.png', flip: 1 },
+  panel: { file: 'panel_dark.png', flip: 1 },
 };
 
 /** Libera las texturas cacheadas (llamar en `dispose`). */

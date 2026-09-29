@@ -28,49 +28,56 @@ const OUT = path.resolve('public/textures');
 const TEXTURES = {
   floor: {
     file: 'floor_metal.png',
-    size: 1024,
-    steps: 30,
-    // "wet"/"reflective" hace que SD 1.5 devuelva agua. Aqui interesa chapa
-    // mate: metal uniformemente iluminado y sin liquido.
+    size: 768,
+    steps: 24,
+    // El fallo anterior: pedir "wet reflective surface" devolvio agua, y
+    // "hexagonal panels" salio como trama de fibra de carbono. Ahora se pide
+    // material de superficie, sin liquido y con juntas rectas.
     prompt:
-      'seamless tileable texture of dark grey industrial metal floor plating, ' +
-      'flat matte surface, straight panel seams forming a regular grid, subtle screws, ' +
-      'slight scuffing, even diffuse lighting, no reflections, ' +
-      'photorealistic, top-down orthographic view, 8k detail',
+      'seamless tileable surface texture of brushed dark steel floor, straight horizontal and ' +
+      'vertical panel seams forming a regular grid, fine brushed grain, matte industrial ' +
+      'finish, uniform diffuse studio lighting, flat top-down view, photorealistic, 8k',
     negative:
-      'water, liquid, ripples, waves, puddle, wet, reflective, mirror, ' +
-      'visible seams at border, frame, text, watermark, perspective, vignette, ' +
-      'blurry, low detail, cartoon, people, objects',
+      'water, liquid, ripples, waves, puddle, wet, reflection, mirror, glossy, carbon fiber, ' +
+      'fabric, cloth, weave, objects, furniture, plant, person, text, logo, watermark, ' +
+      'perspective, vignette, border, frame, blurry',
   },
   wall: {
     file: 'wall_panel.png',
-    size: 1024,
-    steps: 28,
+    // 1024x1024 con 28 pasos no llega a terminar en 10 min con 4 GB de VRAM
+    // y --lowvram. A 512 se resuelve en un par de minutos; el espejado en
+    // espejo Siegel hace el resto.
+    size: 512,
+    steps: 20,
+    // "wall panel" a secas le devuelve a SD una foto de pared con objetos
+    // colgados (un interruptor, un aro cromado). Se pide superficie sin
+    //.installaciones y se prohíben expresamente.
     prompt:
-      'seamless tileable texture of futuristic laboratory wall panel, brushed gunmetal plating, ' +
-      'recessed rectangular sections, small hex bolts, faint cyan emissive indicator strips, ' +
-      'scuffed metal, photorealistic, flat front view, evenly lit, 8k detail',
+      'seamless tileable surface texture of dark grey painted steel wall panel, flat uniform ' +
+      'sheet metal, subtle fine noise, shallow horizontal seams, matte factory finish, ' +
+      'uniform diffuse lighting, flat front view, photorealistic, 8k, no objects',
     negative:
-      'visible seams, borders, frame, text, watermark, perspective, heavy grunge, ' +
-      'blurry, cartoon, people',
+      'switch, outlet, socket, ring, torus, logo, emblem, sign, handle, hinge, cable, pipe, ' +
+      'objects, furniture, plant, person, text, watermark, perspective, vignette, ' +
+      'border, frame, glossy, mirror',
   },
   pillar: {
     file: 'pillar_metal.png',
     size: 512,
     steps: 24,
     prompt:
-      'seamless tileable texture of dark machined metal column, vertical brushed grain, ' +
-      'subtle panel seams and rivets, industrial sci-fi, photorealistic, flat view, evenly lit',
-    negative: 'visible seams, borders, frame, text, watermark, perspective, blurry, cartoon',
+      'seamless tileable surface texture of dark anodized metal, fine vertical brushed grain, ' +
+      'uniform, matte, flat lighting, photorealistic, 8k',
+    negative: 'objects, text, logo, watermark, perspective, border, frame, glossy, mirror, blurry',
   },
   panel: {
     file: 'panel_dark.png',
     size: 512,
     steps: 24,
     prompt:
-      'seamless tileable texture of dark anodized aluminum equipment casing, fine noise grain, ' +
-      'slight wear at edges, sci-fi laboratory hardware, photorealistic, flat view, evenly lit',
-    negative: 'visible seams, borders, frame, text, watermark, perspective, blurry, cartoon',
+      'seamless tileable surface texture of dark grey matte plastic equipment casing, very fine ' +
+      'uniform grain, flat lighting, photorealistic, 8k',
+    negative: 'objects, text, logo, watermark, perspective, border, frame, glossy, mirror, blurry',
   },
 };
 
@@ -129,7 +136,7 @@ async function api(pathname, body) {
   return res.json();
 }
 
-async function waitForHistory(promptId, timeoutMs = 10 * 60 * 1000) {
+async function waitForHistory(promptId, timeoutMs = 25 * 60 * 1000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const res = await fetch(`${COMFY}/history/${promptId}`);
@@ -153,8 +160,12 @@ async function main() {
     console.error('No hay checkpoints en models/checkpoints. Descarga uno y reinicia ComfyUI.');
     process.exit(1);
   }
-  const checkpoint = options[0];
+
+  // CKPT permite elegir. Por defecto el fotorrealista si esta disponible.
+  const preferred = process.env.CKPT;
+  const checkpoint = preferred ?? (options.find((c) => /realistic/i.test(c)) ?? options[0]);
   console.log(`checkpoint: ${checkpoint}`);
+  console.log(`disponibles: ${options.join(', ')}`);
   console.log(`comfy: ${COMFY}`);
 
   await mkdir(OUT, { recursive: true });

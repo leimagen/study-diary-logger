@@ -20,8 +20,10 @@ export function createPostFX(renderer, scene, camera, options = {}) {
     bloomRadius = 0.1,
     bloomThreshold = 0.95,
     focus = 14,
-    aperture = 0.00018,
-    maxblur = 0.012,
+    // Apertura y maxblur altos emborronaban media escena: la falta de nitidez
+    // se leia como "pixelado" aunque el canvas fuese nativo.
+    aperture = 0.00006,
+    maxblur = 0.006,
   } = options;
 
   const size = renderer.getSize(new Vector2());

@@ -100,7 +100,9 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   const sparks = createSparkSystem({ capacity: 1600 });
   scene.add(sparks.points);
-  sparks.seedAmbient({ bounds: { x: 34, y: 14, z: 34 }, count: 260 });
+  // Polvo continuo: se mantiene reemitiendo, no se siembra una vez.
+  const dust = sparks.createAmbientDust({ bounds: { x: 40, y: 13, z: 40 }, rate: 70 });
+  dust.update(2); // llena el aire de entrada sin esperar varios segundos
 
   const towers = createSubjectTowers({ maxSubjects: 10, radius: 8.5 });
   scene.add(towers.group);
@@ -170,6 +172,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     reactor.update(dt);
     towers.tick(dt, time);
     pedestals.tick(dt, time);
+    dust.update(dt);
     sparks.update(dt);
     controls.update();
 

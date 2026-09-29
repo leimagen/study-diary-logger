@@ -97,7 +97,9 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
   let cursor = 0;
   let activeCount = 0;
 
-  /** Emite una chispa. Si el pool está lleno, recicla la más antigua. */
+  /**
+   * Emite una chispa. Si el pool está lleno, recicla la más antigua.
+   */
   function emit({ position, velocity, color, size, life, dragFactor = 0.6, gravityFactor = -1.2 }) {
     const i = cursor;
     cursor = (cursor + 1) % capacity;
@@ -177,23 +179,54 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
     }
   }
 
-  /** Chispas ambientales que flotan en un volumen, para dar vida al aire. */
-  function seedAmbient({ bounds, count = 180, color = 0x63e6ff }) {
-    for (let n = 0; n < count; n++) {
-      const x = (Math.random() - 0.5) * bounds.x;
-      const y = Math.random() * bounds.y;
-      const z = (Math.random() - 0.5) * bounds.z;
-      emit({
-        position: { x, y, z },
-        velocity: { x: (Math.random() - 0.5) * 0.12, y: 0.08 + Math.random() * 0.16, z: (Math.random() - 0.5) * 0.12 },
-        color,
-        // Tamaño pequeño: el factor de escala del shader lo amplifica en pantalla.
-        size: 0.14 + Math.random() * 0.24,
-        life: 6 + Math.random() * 6,
-        dragFactor: 0.2,
-        gravityFactor: 0.02,
-      });
-    }
+  /**
+   * Polvo ambiental continuo.
+   *
+   * No se siembra una vez: se mantiene un presupuesto por segundo y se
+   * reemite en `update`. Con un `seed` único, las partículas mueren a los
+   * 6-12 s y el aire se queda permanentemente vacío.
+   *
+   * @param {{bounds, rate, color, size}} opts
+   */
+  function createAmbientDust({ bounds, rate = 55, color = 0x9fd8ff } = {}) {
+    let carry = 0;
+    return {
+      bounds,
+      rate,
+      color,
+      /** @param {number} dt */
+      update(dt) {
+        // Presupuesto fraccionario: a 10 fps no se emiten 5,5 partículas.
+        carry += rate * dt;
+        let n = Math.floor(carry);
+        if (n <= 0) return;
+        carry -= n;
+
+        for (let i = 0; i < n; i++) {
+          emit({
+            position: {
+              x: (Math.random() - 0.5) * bounds.x,
+              y: Math.random() * bounds.y,
+              z: (Math.random() - 0.5) * bounds.z,
+            },
+            // Deriva lenta lateral y ascenso tenue: se percibe como polvo en
+            // suspension, no como lluvia.
+            velocity: {
+              x: (Math.random() - 0.5) * 0.14,
+              y: 0.05 + Math.random() * 0.12,
+              z: (Math.random() - 0.5) * 0.14,
+            },
+            color: Math.random() < 0.15 ? 0xffe9c4 : color,
+            // Tamaño convariante en pantalla gracias al factor 300/-z del
+            // shader: por eso 0.1-0.3 ya son varios píxeles de cerca.
+            size: 0.1 + Math.random() * 0.3,
+            life: 8 + Math.random() * 8,
+            dragFactor: 0.15,
+            gravityFactor: 0.01,
+          });
+        }
+      },
+    };
   }
 
   function update(dt) {
@@ -247,7 +280,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
     points,
     burst,
     emit,
-    seedAmbient,
+    createAmbientDust,
     update,
     get activeCount() {
       return activeCount;

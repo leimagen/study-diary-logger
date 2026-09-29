@@ -54,8 +54,9 @@ function createFloor({ radius = 44 } = {}) {
     color: 0x3c5a72,
     roughness: 0.62,
     metalness: 0.85,
-    // Un pelo de clearcoat: capa Barniz sobre metal, muy de nave espacial.
-    envMapIntensity: 1.1,
+    // Con 1.1 el mapa de entorno (RoomEnvironment es muy claro) inundaba el
+    // suelo de blanco y lo dejaba plano. Por debajo de 0.5 se ve el metal.
+    envMapIntensity: 0.45,
   });
 
   // Segunda capa: rejilla emisiva sutil, la parte "holográfica".
