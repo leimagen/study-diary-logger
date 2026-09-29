@@ -90,9 +90,16 @@ export function createHUD({ root, lab }) {
 
   /* ---------- Toasts ---------- */
   const toastLayer = el('div', { class: 'toast-layer' });
+  const MAX_TOASTS = 4;
   root.append(bar, toastLayer);
 
   function showToast({ icon, title, message, kind = 'achievement', duration = 4200 }) {
+    // Al importar un backup se pueden desbloquear decenas de logros a la vez.
+    // Sin tope, la pantalla se llena y tapa la escena.
+    while (toastLayer.children.length >= MAX_TOASTS) {
+      toastLayer.firstElementChild.remove();
+    }
+
     const node = el('div', { class: `toast toast--${kind}` }, [
       el('div', { class: 'toast-icon', text: icon ?? '✨' }),
       el('div', { class: 'toast-body' }, [

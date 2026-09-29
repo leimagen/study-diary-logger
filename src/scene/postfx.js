@@ -14,9 +14,11 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 export function createPostFX(renderer, scene, camera, options = {}) {
   const {
-    bloomStrength = 0.75,
-    bloomRadius = 0.5,
-    bloomThreshold = 0.55,
+    // Radius alto difunde el brillo por media pantalla: el reactor se comia el
+    // centro de la imagen. Threshold alto evita que todo lo emisivo florezca.
+    bloomStrength = 0.15,
+    bloomRadius = 0.1,
+    bloomThreshold = 0.95,
     focus = 14,
     aperture = 0.00018,
     maxblur = 0.012,

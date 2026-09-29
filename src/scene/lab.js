@@ -8,7 +8,8 @@
 import {
   ACESFilmicToneMapping,
   Color,
-  Group,
+  PCFSoftShadowMap,
+  PMREMGenerator,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -19,9 +20,11 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import { createPostFX } from './postfx.js';
 import { createEnvironment } from './environment.js';
+import { disposeTextures, upgradeWithComfy } from './textures.js';
 import { createReactor } from './reactor.js';
 import { createSparkSystem } from './particles.js';
 import { createSubjectTowers } from './towers.js';
@@ -46,6 +49,10 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.92;
+  // Sombras reales: el contacto entre objetos es lo que separa 3D de formas
+  // flotando sobre un fondo.
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = PCFSoftShadowMap;
 
   /* ---------------- Escena y cámara ---------------- */
   const scene = new Scene();
@@ -72,6 +79,22 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   /* ---------------- Contenido ---------------- */
   const environment = createEnvironment(scene);
+
+  // Mapa de entorno (IBL). Es lo que mas aporta al realismo: sin el, un
+  // MeshStandardMaterial con metalness alto no tiene nada que reflejar y sale
+  // negro. RoomEnvironment se convierte en un PMREM y se asigna a la escena.
+  const pmrem = new PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  scene.environment = envRT.texture;
+
+  // Si existen texturas generadas con ComfyUI en public/textures, se aplican
+  // encima de las procedurales. No bloquea: la escena ya esta visible.
+  upgradeWithComfy(environment.materials).then((keys) => {
+    if (keys.length > 0) {
+      console.info(`[scene] texturas de ComfyUI aplicadas: ${keys.join(', ')}`);
+    }
+  });
+
   const reactor = createReactor();
   scene.add(reactor.group);
 
@@ -143,7 +166,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     const dt = Math.min(timer.getDelta(), 0.05);
     time += dt;
 
-    environment.update(dt, currentStreak);
+    environment.update(dt, currentStreak, envRT.texture);
     reactor.update(dt);
     towers.tick(dt, time);
     pedestals.tick(dt, time);
@@ -154,8 +177,8 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     const focusTarget = camera.position.distanceTo(reactor.group.position);
     postFX.setFocus(focusTarget);
 
-    // Bloom más intenso con la racha, con techo para no lavar la imagen.
-    postFX.setBloom(0.45 + Math.min(currentStreak, 20) * 0.015);
+    // Bloom con techo: mas racha = mas resplandor, pero sin lavar la escena.
+    postFX.setBloom(0.12 + Math.min(currentStreak, 20) * 0.006, 0.1, 0.95);
 
     postFX.render();
     updateHover();
@@ -320,6 +343,11 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
       postFX.dispose();
       sparks.dispose();
       reactor.dispose();
+      disposeTextures();
+      // El render target del PMREM ocupa VRAM: hay que liberarlo o sobrevive
+      // al renderer.
+      envRT.dispose();
+      pmrem.dispose();
       renderer.dispose();
     },
   };

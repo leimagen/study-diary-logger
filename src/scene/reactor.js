@@ -59,7 +59,7 @@ const CORE_FRAG = /* glsl */ `
 
     // El centro se mantiene translúcido: el volumen lo aporta el fresnel, no
     // un núcleo blanco (que el bloom convertía en una bola plana).
-    float alpha = (0.10 + fresnel * 0.85 + waves * 0.30) * (0.45 + uEnergy * 0.55);
+    float alpha = (0.06 + fresnel * 0.55 + waves * 0.22) * (0.45 + uEnergy * 0.55);
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
   }
 `;
@@ -136,7 +136,7 @@ export function createReactor({ position = [0, 2.6, 0] } = {}) {
   halo.position.y = -position[1] + 0.05;
   group.add(halo);
 
-  const light = new PointLight(0x35d6ff, 40, 22, 2);
+  const light = new PointLight(0x35d6ff, 12, 18, 2);
   group.add(light);
 
   let time = 0;
@@ -175,7 +175,7 @@ export function createReactor({ position = [0, 2.6, 0] } = {}) {
       halo.material.opacity = 0.05 + energy * 0.1 + Math.sin(time * 2) * 0.015;
       halo.scale.setScalar(0.9 + energy * 0.25);
 
-      light.intensity = 18 + energy * 42 + Math.sin(time * 2.2) * 4;
+      light.intensity = 8 + energy * 16 + Math.sin(time * 2.2) * 2;
     },
 
     dispose() {
