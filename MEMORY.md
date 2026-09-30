@@ -360,13 +360,22 @@ y ejecutarlo con `node`.
   sonido, en dos commits (`0789065`, `a78ec89`).
 - Ambos fusionados en `main` con merge commit (`bb705a3`) y ramas borradas.
 
+### Después del primer cierre
+
+La sesión siguió tras cerrar la bitácora (`db2e400`). Dos cambios, directos a
+`main`:
+
+- **XP en `NaN` corregido** (`5fd4fd0`). La causa: `store.replaceAll()`
+  guardaba la lista sin normalizar, y una sesión sin `energy` daba `NaN` en
+  `sessionXP`. La importación desde archivo ya normalizaba; la anotación de
+  pendientes decía que no, y estaba mal: se comprobó leyendo `storage.js`
+  antes de tocar nada. De paso, una dificultad o energía ausente cuenta ahora
+  como neutra (3) y no como la mínima. Siete tests nuevos (107 en total).
+- **Rendijas encendidas por defecto** (`afdbc40`). El usuario decidió
+  recuperar la contraluz; el botón LUZ las sigue apagando.
+
 ### Pendiente
 
-- **XP en `NaN` al importar sesiones sin `energy`.** Se vio con datos de
-  prueba sembrados a mano; la UI siempre rellena el campo, pero `import`
-  no valida. Sin corregir.
-- **Rendijas: decidir si se quedan apagadas.** Sin ellas la sala es más
-  tranquila; con ellas se recupera la contraluz de la referencia.
 - **Texturas de ComfyUI** de `public/textures/` sin uso: son chapa cepillada y
   no encajan con el muro hexagonal. Generar nuevas si se quiere volver a usar
   el pipeline.
