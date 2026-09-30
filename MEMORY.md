@@ -384,3 +384,82 @@ La sesión siguió tras cerrar la bitácora (`db2e400`). Dos cambios, directos a
   cada torre y bajar la resolución de la niebla.
 - **Backend** y **edición de sesiones en la UI**: siguen pendientes de la
   sesión 2.
+
+---
+
+## Sesión 4 — 2026-09-30 · Presentación pública: seguridad, README y demo
+
+El objetivo del usuario: poner el enlace del repositorio en LinkedIn. Primero
+había que saber si el repo exponía algo que no debiera, y después que se
+presentara bien a quien llegue desde fuera.
+
+### Revisión de información sensible
+
+Se revisaron los ficheros actuales **y todo el historial de git** (lo borrado
+en un commit sigue visible en los anteriores):
+
+- Sin claves, tokens ni ficheros de credenciales en ningún commit. Se buscaron
+  patrones de API keys, tokens de GitHub, OpenAI, Hugging Face y AWS,
+  contraseñas y claves privadas.
+- Los PNG de ComfyUI llevan incrustados el prompt y el nombre del modelo en
+  sus metadatos, pero ninguna ruta ni dato personal.
+- **Único dato personal expuesto**: los dos merge commits de los PRs #1 y #2
+  llevan como autor un correo personal (el de la cuenta con la que `gh` hizo
+  el merge). El resto usa el correo anónimo de GitHub. No se reescribió el
+  historial. La recomendación fue activar «Keep my email addresses private» en
+  GitHub para los próximos merges.
+- `MEMORY.md` y `AGENTS.md` mencionan el hardware y la ruta local de ComfyUI:
+  públicos pero sin riesgo. Se dejaron.
+
+### Qué se hizo
+
+- **README reescrito para quien llega desde fuera**: presentación y captura
+  arriba, aspectos técnicos destacables en medio y lo práctico al final.
+  Estaba desactualizado: hablaba de cúpula y pilares, y de 82 tests.
+- **Demo en GitHub Pages** (https://leimagen.github.io/study-diary-logger/):
+  `vite.config.js` con `base: './'` y un workflow que en cada push a `main`
+  pasa los tests, construye y publica. Si un test falla, no se publica.
+- **Botón «Cargar datos de ejemplo»**: quien llega a la demo empieza sin datos
+  y veía la sala vacía. `core/demo.js` genera siete semanas deterministas
+  (cinco materias con ritmos distintos, racha activa al final). El botón solo
+  aparece sin sesiones, así que nunca pisa un historial real. Se hizo
+  secundario, con contorno, porque en blanco sólido competía con «Registrar
+  sesión».
+- **Descripción, web y temas del repo** actualizados en GitHub.
+
+### Cosas que conviene recordar
+
+- **Capturas sin el panel del navegador.** Cuando no dibujaba (ventana detrás
+  de otra), se renderizó un fotograma a mano (`lab.postFX.render`), se leyó el
+  canvas con `toDataURL` y se envió por `fetch` a un receptor HTTP de un solo
+  uso en `127.0.0.1`, que lo guardó en disco. Evita copiar a mano cientos de
+  KB en base64.
+- **Bash se come `${...}` en los parches con `node -e`.** Volvió a pasar: un
+  mensaje del toast quedó vacío (`message: ,`). Se detectó leyendo el fichero
+  antes de probar. Para parches con plantillas, script en el scratchpad.
+- Un test del generador de demo no comprobaba nada: `validateSession(s).ok ||
+  s.date <= T` siempre era verdadero. Se endureció. Leer cada test nuevo
+  preguntándose si podría fallar.
+- La demo pública arranca **sin datos**: cada visitante tiene su propio
+  `localStorage`. Por eso el botón de ejemplo importa tanto como la captura.
+
+### Verificación
+
+- Tests: de 107 a **117** (generador de demo).
+- Despliegues de Pages correctos (build, tests y publicación en verde); la web
+  responde y el código publicado incluye el botón.
+- Click real en el botón en local: 58 sesiones, racha de 17 días, nivel 14,
+  13 logros y solo dos avisos, sin avalancha de logros.
+
+### Commits (directos a `main`)
+
+`94e9ddc` README y captura · `4260ccd` demo en Pages · `078d15e` botón de
+datos de ejemplo.
+
+### Pendiente
+
+- **Correo personal en dos merge commits.** Solo se quitaría reescribiendo el
+  historial con push forzado a `main`; se desaconsejó.
+- **Texturas de ComfyUI** sin uso, **rendimiento en densidad 2×** sin medir,
+  **backend** y **edición de sesiones en la UI**: siguen de sesiones
+  anteriores.
