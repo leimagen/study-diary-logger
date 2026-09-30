@@ -15,7 +15,14 @@ export function el(tag, props = {}, children = []) {
     else if (key === 'text') node.textContent = value;
     else if (key === 'html') node.innerHTML = value;
     else if (key === 'dataset') Object.assign(node.dataset, value);
-    else if (key === 'style') Object.assign(node.style, value);
+    else if (key === 'style') {
+      // Las variables CSS (--algo) solo entran con setProperty: asignadas
+      // como propiedad del objeto style se ignoran sin error.
+      for (const [prop, v] of Object.entries(value)) {
+        if (prop.startsWith('--')) node.style.setProperty(prop, v);
+        else node.style[prop] = v;
+      }
+    }
     else if (key.startsWith('on') && typeof value === 'function') {
       node.addEventListener(key.slice(2).toLowerCase(), value);
     } else node.setAttribute(key, value);

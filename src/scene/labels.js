@@ -6,6 +6,7 @@
  */
 
 import { CanvasTexture, LinearFilter, Sprite, SpriteMaterial, SRGBColorSpace } from 'three';
+import { NO_REFLECTION_LAYER } from './wet.js';
 
 const FONT_STACK = '"Segoe UI", "Inter", system-ui, sans-serif';
 
@@ -16,12 +17,16 @@ const FONT_STACK = '"Segoe UI", "Inter", system-ui, sans-serif';
  */
 export function createLabel(text, options = {}) {
   const {
-    color = '#d8f6ff',
-    background = 'rgba(6, 18, 28, 0.72)',
-    fontSize = 44,
-    weight = 600,
+    // Placa de museo: fondo casi negro, texto blanco roto, filo apenas
+    // visible. Sin color propio: la sala solo tiene un acento de luz.
+    color = '#e6edf2',
+    background = 'rgba(6, 8, 10, 0.62)',
+    fontSize = 40,
+    weight = 500,
     padding = 22,
-    borderColor = 'rgba(53, 214, 255, 0.5)',
+    borderColor = 'rgba(220, 239, 255, 0.16)',
+    // Los emoji traen su propio color y rompen la paleta de la sala.
+    monochrome = false,
   } = options;
 
   const measureCanvas = document.createElement('canvas');
@@ -52,6 +57,7 @@ export function createLabel(text, options = {}) {
   }
 
   // Texto centrado.
+  if (monochrome) c.filter = 'grayscale(1) brightness(1.15)';
   c.font = font;
   c.fillStyle = color;
   c.textAlign = 'center';
@@ -77,6 +83,9 @@ export function createLabel(text, options = {}) {
   sprite.scale.set(width * scale, height * scale, 1);
   sprite.userData.aspect = width / height;
   sprite.userData.text = text;
+  // La ve la camara principal pero no las de los reflejos, que si no
+  // pintarian las placas en los charcos.
+  sprite.layers.set(NO_REFLECTION_LAYER);
 
   return sprite;
 }

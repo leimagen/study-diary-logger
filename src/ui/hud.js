@@ -6,6 +6,27 @@
 import { el } from './dom.js';
 import { formatDuration } from '../core/model.js';
 
+/**
+ * Preferencia de sonido de este navegador. Es una comodidad por visitante:
+ * si el almacenamiento falla (modo privado), el sonido vuelve a su valor por
+ * defecto y ya está.
+ */
+const SOUND_KEY = 'studyLab.sound';
+function readSoundPreference() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+function writeSoundPreference(on) {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? 'on' : 'off');
+  } catch {
+    /* sin almacenamiento: no se recuerda, sin más */
+  }
+}
+
 export function createHUD({ root, lab }) {
   /* ---------- Barra de rango ---------- */
   const levelBadge = el('div', { class: 'hud-level' }, [
@@ -64,10 +85,44 @@ export function createHUD({ root, lab }) {
     title: 'Cámara automática',
     text: 'AUTO',
     onClick: () => {
-      lab.setAutoRotate(!lab.controls.autoRotate);
-      rotateBtn.classList.toggle('is-off', !lab.controls.autoRotate);
+      lab.setAutoRotate(!lab.autoRotate);
+      rotateBtn.classList.toggle('is-off', !lab.autoRotate);
     },
   });
+  const slitsBtn = el('button', {
+    class: lab.slitsEnabled ? 'ctl' : 'ctl is-off',
+    type: 'button',
+    title: 'Rendijas de luz del muro',
+    text: 'LUZ',
+    onClick: () => {
+      lab.setSlitsEnabled(!lab.slitsEnabled);
+      slitsBtn.classList.toggle('is-off', !lab.slitsEnabled);
+    },
+  });
+  // Sonido: el navegador no deja reproducir nada sin un gesto, asi que con la
+  // preferencia activada arranca en el primer click o tecla sobre la pagina.
+  let soundWanted = readSoundPreference();
+  const soundBtn = el('button', {
+    class: soundWanted ? 'ctl' : 'ctl is-off',
+    type: 'button',
+    title: 'Sonido de ambiente',
+    text: 'SON',
+    onClick: (e) => {
+      e.stopPropagation();
+      soundWanted = !soundWanted;
+      writeSoundPreference(soundWanted);
+      lab.setSoundEnabled(soundWanted);
+      soundBtn.classList.toggle('is-off', !soundWanted);
+    },
+  });
+  const firstGesture = () => {
+    window.removeEventListener('pointerdown', firstGesture);
+    window.removeEventListener('keydown', firstGesture);
+    if (soundWanted && !lab.soundEnabled) lab.setSoundEnabled(true);
+  };
+  window.addEventListener('pointerdown', firstGesture);
+  window.addEventListener('keydown', firstGesture);
+
   const resetBtn = el('button', {
     class: 'ctl',
     type: 'button',
@@ -85,7 +140,7 @@ export function createHUD({ root, lab }) {
     levelBlock,
     streakBlock,
     el('div', { class: 'hud-stats' }, [todayBlock, totalBlock]),
-    el('div', { class: 'hud-controls' }, [dofBtn, rotateBtn, resetBtn]),
+    el('div', { class: 'hud-controls' }, [soundBtn, slitsBtn, dofBtn, rotateBtn, resetBtn]),
   ]);
 
   /* ---------- Toasts ---------- */

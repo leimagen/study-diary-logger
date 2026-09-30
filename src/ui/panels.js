@@ -89,7 +89,12 @@ export function createSubjectPanel() {
     for (const subject of subjects.slice(0, 8)) {
       const pct = (subject.minutes / total) * 100;
       list.append(
-        el('div', { class: 'subject-row', title: `${subject.topTopic || ''} · ${subject.sessions} sesiones` }, [
+        el('div', {
+          class: 'subject-row',
+          title: `${subject.topTopic || ''} · ${subject.sessions} sesiones`,
+          // Mismo matiz que su torre en la escena (ver core/stats.js).
+          style: { '--tint': `var(--tint-${subject.tint ?? 0})` },
+        }, [
           el('div', { class: 'subject-head' }, [
             el('span', { class: 'subject-name', text: subject.subject }),
             el('span', { class: 'subject-time', text: formatDuration(subject.minutes) }),

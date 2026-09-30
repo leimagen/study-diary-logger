@@ -6,9 +6,9 @@
  */
 
 import {
-  ACESFilmicToneMapping,
+  AgXToneMapping,
   Color,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PMREMGenerator,
   PerspectiveCamera,
   Raycaster,
@@ -20,23 +20,42 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 import { createPostFX } from './postfx.js';
-import { createEnvironment } from './environment.js';
+import { ROOM, createEnvironment, createEnvironmentMapScene } from './environment.js';
 import { disposeTextures, upgradeWithComfy } from './textures.js';
 import { createReactor } from './reactor.js';
 import { createSparkSystem } from './particles.js';
+import { createDust } from './dust.js';
+import { createMistPass } from './mist.js';
+import { createWind } from './wind.js';
+import { createAirUniforms } from './air.js';
+import { createFountain } from './fountain.js';
+import { createSoundscape } from './audio.js';
 import { createSubjectTowers } from './towers.js';
-import { createFountain } from './water.js';
+import { createWetReflection } from './wet.js';
 import { createAchievementPedestals } from './pedestals.js';
+import { LIGHT } from './palette.js';
 import { ACHIEVEMENTS } from '../core/gamification.js';
 
+/**
+ * Chispas de celebracion. Misma familia de luz que la sala: el rango del
+ * logro ya se ve en el metal del medallon.
+ */
 const PALETTE = {
-  burst: 0x35d6ff,
-  achievement: 0xffc53d,
-  levelUp: 0xa78bfa,
+  burst: LIGHT.cold,
+  achievement: 0xfff0d8,
+  levelUp: LIGHT.core,
 };
+
+const HOME = { position: new Vector3(0, 5.6, 19), target: new Vector3(0, 3.0, 0) };
+
+/**
+ * Rendijas de luz del muro. Apagadas a peticion del usuario para probar la
+ * sala sin ellas; `lab.setSlitsEnabled(true)` las vuelve a encender.
+ */
+const SLITS_ON = false;
 
 export function createLab({ canvas, container, onAchievementClick } = {}) {
   /* ---------------- Renderer ---------------- */
@@ -48,16 +67,18 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  // AgX: las altas luces (rendijas, nucleo) se desaturan hacia blanco como
+  // en una foto, en vez de quedarse en cian quemado como con ACES.
+  renderer.toneMapping = AgXToneMapping;
+  renderer.toneMappingExposure = 1.0;
   // Sombras reales: el contacto entre objetos es lo que separa 3D de formas
   // flotando sobre un fondo.
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.type = PCFShadowMap;
 
   /* ---------------- Escena y cámara ---------------- */
   const scene = new Scene();
-  scene.background = new Color(0x03070d);
+  scene.background = new Color(0x000000);
 
   const camera = new PerspectiveCamera(
     52,
@@ -65,57 +86,111 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     0.1,
     200,
   );
-  camera.position.set(0, 7.5, 19);
+  camera.position.copy(HOME.position);
+  // Las placas de texto viven en la capa 1 (ver labels.js).
+  camera.layers.enable(1);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.target.set(0, 2.4, 0);
+  controls.target.copy(HOME.target);
   controls.minDistance = 6;
-  controls.maxDistance = 42;
-  controls.maxPolarAngle = Math.PI * 0.52; // no bajar del suelo
+  // Siempre dentro de la rotonda: fuera solo se ve el exterior del muro.
+  controls.maxDistance = ROOM.radius - 6;
+  controls.maxPolarAngle = Math.PI * 0.49; // no bajar del suelo
   controls.enablePan = false;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.28;
 
   /* ---------------- Contenido ---------------- */
-  const environment = createEnvironment(scene);
+  // Sin esto los RectAreaLight de las rendijas no iluminan nada.
+  RectAreaLightUniformsLib.init();
 
-  // Mapa de entorno (IBL). Es lo que mas aporta al realismo: sin el, un
-  // MeshStandardMaterial con metalness alto no tiene nada que reflejar y sale
-  // negro. RoomEnvironment se convierte en un PMREM y se asigna a la escena.
-  const pmrem = new PMREMGenerator(renderer);
-  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
-  scene.environment = envRT.texture;
+  // Transmisor de radio junto al muro, lejos de la vista inicial: la radio
+  // debe sonar al fondo.
+  const RADIO_POSITION = new Vector3(-19.5, 1.0, -21);
+  const environment = createEnvironment(scene, { transmitterPosition: RADIO_POSITION });
+
   /**
-   * Muy bajo a proposito. RoomEnvironment es una sala BLANCA: el suelo es
-   * metal y en angulo rasante el Fresnel sube a casi 1, asi que una IBL
-   * aunque sea tenue se refleja como un manchon blanco que se ve incluso
-   * fuera del domo y ciega al girar la camara. Casi apagada.
+   * Mapa de entorno construido con la propia boveda: negra, con las rendijas
+   * y el anillo del techo. Con el, metal y laca reflejan lo que hay en la
+   * sala. RoomEnvironment era una sala blanca y convertia el suelo en un
+   * manchon en rasante (ver bitacora); este no tiene nada blanco que no este
+   * tambien en la escena.
    */
-  scene.environmentIntensity = 0;
+  const pmrem = new PMREMGenerator(renderer);
+  let envRT = null;
+  function buildEnvironmentMap(slits) {
+    const envScene = createEnvironmentMapScene({ slits });
+    const next = pmrem.fromScene(envScene, 0.02, 0.1, 100, { position: new Vector3(0, 2.6, 0) });
+    envScene.traverse((o) => {
+      if (o.isMesh) {
+        o.geometry.dispose();
+        o.material.dispose();
+      }
+    });
+    envRT?.dispose();
+    envRT = next;
+    scene.environment = envRT.texture;
+  }
+  scene.environmentIntensity = 1;
 
-  // Si existen texturas generadas con ComfyUI en public/textures, se aplican
-  // encima de las procedurales. No bloquea: la escena ya esta visible.
   upgradeWithComfy(environment.materials).then((keys) => {
     if (keys.length > 0) {
       console.info(`[scene] texturas de ComfyUI aplicadas: ${keys.join(', ')}`);
     }
   });
 
-  const reactor = createReactor();
+  const reactor = createReactor({ ceiling: ROOM.height });
   scene.add(reactor.group);
 
-  // Fuente bajo el reactor: reflejo real en un circulo pequeno. El pavement
-  // mojado del resto lo hace el motor PBR con rugosidad variable.
-  const puddle = createFountain({ radius: 3.4 });
-  scene.add(puddle.group);
+  // Reflejo del pavimento mojado. Solo se actualiza para la camara principal.
+  const wet = createWetReflection({ radius: ROOM.radius });
+  scene.add(wet.mesh);
+  wet.attachTo(camera);
 
-  const sparks = createSparkSystem({ capacity: 1600 });
+  // Sonido de ambiente. No suena hasta setSoundEnabled(true) desde un gesto.
+  const daisTop = ROOM.dais[ROOM.dais.length - 1][1];
+  const sound = createSoundscape({
+    camera,
+    reactorPosition: reactor.group.position,
+    fountainPosition: new Vector3(0, daisTop + 0.42, 0),
+    radioPosition: RADIO_POSITION,
+  });
+
+  const fountain = createFountain({
+    renderer,
+    camera,
+    baseY: daisTop,
+    dripFrom: reactor.lowestPoint,
+    onSplash: (x, y, z, amplitude, radius) => sound.drop(x, y, z, amplitude, radius),
+  });
+  scene.add(fountain.group);
+
+  const sparks = createSparkSystem({ capacity: 1200 });
   scene.add(sparks.points);
-  // Polvo continuo: se mantiene reemitiendo, no se siembra una vez. No se
-  // prellena porque las particiones deben entrar con fade-in, no de golpe.
-  const dust = sparks.createAmbientDust({ bounds: { x: 40, y: 13, z: 40 }, rate: 70 });
+
+  // Aire: viento y luz compartidos por el polvo y la niebla.
+  const wind = createWind();
+  const air = createAirUniforms({
+    spot: { apex: ROOM.height - 0.35, angle: 0.3 },
+    slits: ROOM.slitAngles.map((a) => [Math.cos(a) * (ROOM.radius - 0.5), Math.sin(a) * (ROOM.radius - 0.5)]),
+    slitHeight: ROOM.slitHeight,
+    core: reactor.group.position,
+  });
+
+  const dust = createDust({ radius: ROOM.radius - 3, height: ROOM.height - 2, air, wind: wind.uniforms });
+  scene.add(dust.points);
+
+
+  let slitsOn = SLITS_ON;
+  function setSlitsEnabled(on) {
+    slitsOn = on;
+    environment.setSlitsEnabled(on);
+    air.uSlitGain.value = on ? 1 : 0;
+    buildEnvironmentMap(on);
+  }
+  setSlitsEnabled(SLITS_ON);
 
   const towers = createSubjectTowers({ maxSubjects: 10, radius: 8.5 });
   scene.add(towers.group);
@@ -130,11 +205,17 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
 
   const postFX = createPostFX(renderer, scene, camera, { focus: 19 });
 
+  // Niebla volumetrica: un pase tras el render de la escena, antes del DOF,
+  // para que se desenfoque con lo que hay detras.
+  const mist = createMistPass({ camera, air, wind: wind.uniforms, radius: ROOM.radius - 2 });
+  postFX.addSceneEffect(mist.pass);
+
   /* ---------------- Interacción ---------------- */
   const raycaster = new Raycaster();
   const pointer = new Vector2();
   let hovered = null;
   let lastPointerDown = 0;
+  const downAt = new Vector2();
 
   renderer.domElement.addEventListener('pointermove', (e) => {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -142,16 +223,48 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   });
 
-  renderer.domElement.addEventListener('pointerdown', () => {
+  renderer.domElement.addEventListener('pointerdown', (e) => {
     lastPointerDown = performance.now();
+    downAt.set(e.clientX, e.clientY);
   });
 
-  renderer.domElement.addEventListener('click', () => {
-    // Se ignora el click si ha sido un arrastre de cámara.
+  renderer.domElement.addEventListener('click', (e) => {
+    // Se ignora el click si ha sido un arrastre de cámara: por tiempo o por
+    // recorrido (un arrastre rápido cabe en 250 ms).
     if (performance.now() - lastPointerDown > 250) return;
-    const hit = pickMedal();
-    if (hit && onAchievementClick) onAchievementClick(hit);
+    if (downAt.distanceTo(new Vector2(e.clientX, e.clientY)) > 6) return;
+
+    const medal = pickMedal();
+    if (medal) {
+      onAchievementClick?.(medal);
+      return;
+    }
+    // Tocar el agua la agita.
+    const water = raycaster.intersectObject(fountain.raycastTarget, false)[0];
+    if (water) {
+      fountain.drop(water.point.x, water.point.z);
+      return;
+    }
+    // Click en el vacío: vuelta a la vista general, si no se está ya en ella.
+    if (isAwayFromHome()) api.resetView();
   });
+
+  const homePolar = Math.acos((HOME.position.y - HOME.target.y) / HOME.position.distanceTo(HOME.target));
+
+  /**
+   * ¿Se ha apartado la cámara de la vista general? El giro automático cambia
+   * el azimut, así que solo cuentan el objetivo, la distancia y la altura.
+   */
+  function isAwayFromHome() {
+    if (focused) return true;
+    const homeDistance = HOME.position.distanceTo(HOME.target);
+    const distance = camera.position.distanceTo(controls.target);
+    return (
+      controls.target.distanceTo(HOME.target) > 0.3 ||
+      Math.abs(distance - homeDistance) > 1.5 ||
+      Math.abs(controls.getPolarAngle() - homePolar) > 0.08
+    );
+  }
 
   function pickMedal() {
     raycaster.setFromCamera(pointer, camera);
@@ -181,24 +294,24 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     const dt = Math.min(timer.getDelta(), 0.05);
     time += dt;
 
-    environment.update(dt, currentStreak, envRT.texture);
+    environment.update(dt, currentStreak);
     reactor.update(dt);
     towers.tick(dt, time);
     pedestals.tick(dt, time);
-    puddle.update(dt);
+    wet.update(dt);
+    fountain.update(dt);
+    wind.update(dt);
+    air.uCoreEnergy.value = 0.15 + (Math.min(currentStreak, 30) / 30) * 0.5;
     dust.update(dt);
+    mist.update(dt);
+    sound.update(dt, { energy: reactor.energy, wind: wind.velocities });
     sparks.update(dt);
     controls.update();
 
     // El enfoque sigue al reactor: mantiene el DOF con sentido.
-    const focusTarget = camera.position.distanceTo(reactor.group.position);
-    postFX.setFocus(focusTarget);
+    postFX.setFocus(camera.position.distanceTo(reactor.group.position));
 
-    // Bloom generoso: es lo que hace legibles las torres, las tiras de los
-    // pilares y el reactor en una sala por lo demas a oscuras.
-    postFX.setBloom(0.62 + Math.min(currentStreak, 20) * 0.015, 0.42, 0.55);
-
-    postFX.render();
+    postFX.render(dt);
     updateHover();
   }
 
@@ -235,6 +348,10 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     postFX.setSize(w, h);
+    // Reflejo a media resolucion: se desenfoca de todos modos.
+    const ratio = renderer.getPixelRatio();
+    wet.setSize(Math.round(w * ratio * 0.5), Math.round(h * ratio * 0.5));
+    dust.setViewport(h * ratio, camera.fov);
   }
 
   const resizeObserver = new ResizeObserver(resize);
@@ -290,8 +407,15 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     }
   }
 
+  /* ---------------- Vista ---------------- */
+  // Preferencia de giro automático (botón del HUD). Enfocar un logro lo
+  // suspende; volver a la vista general lo restaura.
+  let rotatePreference = controls.autoRotate;
+  let focused = false;
+  let viewTimer = null;
+
   /* ---------------- API pública ---------------- */
-  return {
+  const api = {
     scene,
     camera,
     controls,
@@ -320,28 +444,56 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     focusAchievement(id) {
       const pos = pedestals.worldPositionOf(id);
       if (!pos) return;
+      // Enfocado se queda quieto: girar alrededor de un medallón marea. Un
+      // click en el vacío (o el botón de vista general) devuelve la cámara.
+      focused = true;
+      clearTimeout(viewTimer);
       controls.autoRotate = false;
       // Distancia suficiente para ver el medallón con contexto, no de cerca
       // hasta taparlo. Se mira desde fuera del anillo hacia el centro.
       const outward = pos.clone().setY(0).normalize();
       const targetPos = pos.clone().addScaledVector(outward, 4).setY(pos.y + 2.2);
       animateCamera(targetPos, pos.clone().setY(pos.y + 0.2), 900);
-      setTimeout(() => {
-        controls.autoRotate = true;
-      }, 9000);
     },
 
     /** Vuelve a la vista general. */
     resetView() {
+      focused = false;
+      clearTimeout(viewTimer);
       controls.autoRotate = false;
-      animateCamera(new Vector3(0, 7.5, 19), new Vector3(0, 2.4, 0), 800);
-      setTimeout(() => {
-        controls.autoRotate = true;
-      }, 8000);
+      animateCamera(HOME.position.clone(), HOME.target.clone(), 800);
+      viewTimer = setTimeout(() => {
+        controls.autoRotate = rotatePreference;
+      }, 2500);
+    },
+
+    /** Preferencia de giro (lo que muestra el botón), aunque esté en pausa. */
+    get autoRotate() {
+      return rotatePreference;
     },
 
     setAutoRotate(enabled) {
-      controls.autoRotate = enabled;
+      rotatePreference = enabled;
+      controls.autoRotate = enabled && !focused;
+    },
+
+    /** Rendijas de luz del muro (ver SLITS_ON). */
+    setSlitsEnabled,
+    get slitsEnabled() {
+      return slitsOn;
+    },
+
+    /** Sonido de ambiente. Activarlo requiere un gesto del usuario. */
+    setSoundEnabled(on) {
+      sound.setEnabled(on);
+    },
+    get soundEnabled() {
+      return sound.enabled;
+    },
+
+    /** Niebla baja: 0 la apaga, 1 es la densidad por defecto. */
+    setMistDensity(k) {
+      mist.setDensity(k);
     },
 
     setDofEnabled(enabled) {
@@ -360,6 +512,11 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
       controls.dispose();
       postFX.dispose();
       sparks.dispose();
+      dust.dispose();
+      mist.dispose();
+      sound.dispose();
+      fountain.dispose();
+      wet.dispose();
       reactor.dispose();
       disposeTextures();
       // El render target del PMREM ocupa VRAM: hay que liberarlo o sobrevive
@@ -369,6 +526,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
       renderer.dispose();
     },
   };
+  return api;
 
   /** Interpola cámara y objetivo con easeInOutCubic. */
   function animateCamera(toPosition, toTarget, duration) {

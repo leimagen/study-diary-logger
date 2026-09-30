@@ -49,11 +49,11 @@ export async function comfyTexture(name, { srgb = false } = {}) {
   return texture;
 }
 
-/** Canvas 2D con tamaño fijo, listo para pintar. */
-function surface(size) {
+/** Canvas 2D con tamaño fijo, listo para pintar. Cuadrado salvo que se pida alto. */
+function surface(width, height = width) {
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = width;
+  canvas.height = height;
   return { canvas, ctx: canvas.getContext('2d') };
 }
 
@@ -114,12 +114,12 @@ function fbm(noise, x, y, octaves = 5, lacunarity = 2, gain = 0.5) {
  * Convierte un mapa de alturas (escala de grises) en un mapa de normales.
  * Es lo que da la sensación de relieve real bajo una luz rasante.
  */
-function normalFromHeight(height, size, strength = 2.4) {
-  const { canvas, ctx } = surface(size);
-  const img = ctx.createImageData(size, size);
-  const at = (x, y) => height[((y + size) % size) * size + ((x + size) % size)];
+function normalFromHeight(height, size, strength = 2.4, rows = size) {
+  const { canvas, ctx } = surface(size, rows);
+  const img = ctx.createImageData(size, rows);
+  const at = (x, y) => height[((y + rows) % rows) * size + ((x + size) % size)];
 
-  for (let y = 0; y < size; y++) {
+  for (let y = 0; y < rows; y++) {
     for (let x = 0; x < size; x++) {
       // Sobel: la dirección de la pendiente da la normal.
       const dx =
@@ -157,101 +157,63 @@ function finish(canvas, { repeat = 1, srgb = false } = {}) {
 }
 
 /**
- * Chapa metálica industrial: rugosidad irregular con manchas de desgaste.
- * @returns {{roughnessMap: Texture, normalMap: Texture}}
+ * Losas de piedra oscura pulida, en seco.
+ *
+ * El agua NO va aqui: la mojadez es un campo de ruido en coordenadas de
+ * mundo que se evalua en el shader (ver wet.js). Si fuera en la textura se
+ * repetiria con ella, y los charcos calcados cada pocas losas delatan el
+ * tileado enseguida.
  */
-export function metalSurface({ size = 512, repeat = 4, seed = 7 } = {}) {
-  const key = `metal-${size}-${seed}`;
-  if (cache.has(key)) return cache.get(key);
-
-  const noise = valueNoise(seed);
-  const height = new Float32Array(size * size);
-  const { canvas: roughCanvas, ctx: roughCtx } = surface(size);
-  const rough = roughCtx.createImageData(size, size);
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = (x / size) * 6;
-      const v = (y / size) * 6;
-      const grain = fbm(noise, u, v, 5);
-      const scratches = fbm(noise, u * 9, v * 0.6, 3) * 0.35;
-      const h = grain + scratches;
-      height[y * size + x] = h;
-
-      // Las zonas pulidas (hundidas) son más brillantes -> menor rugosidad.
-      const r = Math.min(1, Math.max(0, 0.62 - h * 0.45));
-      const i = (y * size + x) * 4;
-      const value = r * 255;
-      rough.data[i] = value;
-      rough.data[i + 1] = value;
-      rough.data[i + 2] = value;
-      rough.data[i + 3] = 255;
-    }
-  }
-  roughCtx.putImageData(rough, 0, 0);
-
-  const result = {
-    roughnessMap: finish(roughCanvas, { repeat }),
-    normalMap: finish(normalFromHeight(height, size), { repeat }),
-  };
-  cache.set(key, result);
-  return result;
-}
-
-/**
- * Suelo del laboratorio: placas metálicas con juntas, rejilla y desgaste.
- * El albedo va en sRGB; el resto en lineal.
- */
-export function labFloor({ size = 1024, repeat = 10, seed = 21 } = {}) {
-  const key = `floor-${size}-${seed}`;
+export function stoneFloor({ size = 1024, repeat = 6, seed = 21 } = {}) {
+  const key = `stone-${size}-${seed}`;
   if (cache.has(key)) return cache.get(key);
 
   const noise = valueNoise(seed);
   const { canvas, ctx } = surface(size);
   const { canvas: roughCanvas, ctx: roughCtx } = surface(size);
+  const img = ctx.createImageData(size, size);
   const rough = roughCtx.createImageData(size, size);
   const height = new Float32Array(size * size);
 
-  const cell = size / 4; // 4x4 placas por textura
-  const joint = size * 0.006;
-
-  const img = ctx.createImageData(size, size);
+  const cell = size / 4; // 4x4 losas por textura
+  const joint = size * 0.0035;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = (x / size) * 8;
       const v = (y / size) * 8;
-      const grain = fbm(noise, u, v, 5);
-      const wear = Math.max(0, fbm(noise, u * 0.35, v * 0.35, 3)) * 0.6;
+      const grain = fbm(noise, u * 3, v * 3, 4);
+      const cloud = fbm(noise, u * 0.6 + 40, v * 0.6, 4);
 
-      // Distancia a la junta más cercana: define la placa.
       const gx = Math.min(x % cell, cell - (x % cell));
       const gy = Math.min(y % cell, cell - (y % cell));
       const edge = Math.min(gx, gy);
-      const isJoint = edge < joint;
+      // Canto biselado, no un corte a pico: bajo luz rasante el bisel es lo
+      // que dibuja la losa.
+      const bevel = Math.min(1, Math.max(0, (edge - joint) / (joint * 2.5)));
 
-      // Variación de tono por placa para que el suelo no sea uniforme.
-      const plateX = Math.floor(x / cell);
-      const plateY = Math.floor(y / cell);
-      const plateTone = (valueNoise(seed + plateX * 31 + plateY * 17)(plateX * 0.7, plateY * 0.3) + 1) / 2;
+      const slab = valueNoise(seed + Math.floor(x / cell) * 31 + Math.floor(y / cell) * 17);
+      const slabTone = slab(0.37, 0.61) * 0.5 + 0.5;
 
-      const base = 0.10 + plateTone * 0.035 + grain * 0.03 + wear * 0.05;
       const i = (y * size + x) * 4;
-      const c = isJoint ? base * 0.35 : base;
-      img.data[i] = c * 255 * 1.0;
-      img.data[i + 1] = c * 255 * 1.08;
-      img.data[i + 2] = c * 255 * 1.2;
+      // Oscuro, pero no negro absoluto. Ojo: el canvas va en sRGB. 0.05 aqui
+      // son 0.004 en lineal, mas negro que el terciopelo, y ninguna luz lo
+      // saca. La piedra negra real ronda 0.04 lineal, unos 0.2 en sRGB.
+      const base = 0.15 + slabTone * 0.04 + cloud * 0.03 + grain * 0.012;
+      const c = base * (0.35 + bevel * 0.65);
+      img.data[i] = c * 255;
+      img.data[i + 1] = c * 255 * 1.02;
+      img.data[i + 2] = c * 255 * 1.05;
       img.data[i + 3] = 255;
 
-      // La junta es rugosa; la placa pulida por el tránsito.
-      const r = isJoint ? 0.95 : 0.35 + wear * 0.4 + Math.abs(grain) * 0.2;
+      const r = edge < joint ? 0.95 : 0.5 + slabTone * 0.12 + cloud * 0.1 + Math.abs(grain) * 0.1;
       const value = Math.min(1, Math.max(0, r)) * 255;
       rough.data[i] = value;
       rough.data[i + 1] = value;
       rough.data[i + 2] = value;
       rough.data[i + 3] = 255;
 
-      height[y * size + x] = isJoint ? -1 : grain * 0.25 + wear * 0.15;
+      height[y * size + x] = bevel + grain * 0.04;
     }
   }
 
@@ -261,82 +223,87 @@ export function labFloor({ size = 1024, repeat = 10, seed = 21 } = {}) {
   const result = {
     map: finish(canvas, { repeat, srgb: true }),
     roughnessMap: finish(roughCanvas, { repeat }),
-    normalMap: finish(normalFromHeight(height, size, 3.2), { repeat }),
+    normalMap: finish(normalFromHeight(height, size, 1.4), { repeat }),
   };
   cache.set(key, result);
   return result;
 }
 
 /**
- * Pavimento mojado: las mismas placas, pero con bolsas de agua.
+ * Paneles hexagonales para el muro de la boveda.
  *
- * La clave del efecto: en las zonas mojadas la rugosidad cae a ~0.05 y el
- * relieve se deforma con ondas. Es el motor PBR el que refleja las luces,
- * no un espejo: un Reflector grande devolvia imagenes nitidas de los aros del
- * techo en forma de franjas duras cruzando el suelo, que es justo lo que
- * quiero evitar. Con rugosidad variable el reflejo se difunde y se rompe en
- * brillos suaves, como el agua real.
+ * La rejilla hexagonal es periodica en (1, raiz de 3) celdas, asi que el
+ * lienzo no es cuadrado: `cols` celdas de ancho por `rows` periodos de alto,
+ * con lo que la textura encaja consigo misma al repetirse.
+ *
+ * Cada panel tiene su propia rugosidad: al pasar la luz de una rendija por el
+ * muro, los paneles se encienden de forma desigual, que es lo que hace que el
+ * muro se lea como piezas montadas y no como papel pintado.
  */
-export function wetLabFloor({ size = 1024, repeat = 10, seed = 21, wetSeed = 19 } = {}) {
-  const key = `wetfloor-${size}-${seed}-${wetSeed}`;
+export function hexPanels({ cellPx = 128, cols = 4, rows = 2, seed = 33 } = {}) {
+  const key = `hex-${cellPx}-${cols}-${rows}-${seed}`;
   if (cache.has(key)) return cache.get(key);
 
+  const SQ3 = Math.sqrt(3);
+  const width = cols * cellPx;
+  const heightPx = Math.round(rows * SQ3 * cellPx);
   const noise = valueNoise(seed);
-  const wetNoise = valueNoise(wetSeed);
-  const { canvas, ctx } = surface(size);
-  const { canvas: roughCanvas, ctx: roughCtx } = surface(size);
-  const rough = roughCtx.createImageData(size, size);
-  const height = new Float32Array(size * size);
 
-  const cell = size / 4;
-  const joint = size * 0.006;
+  const { canvas, ctx } = surface(width, heightPx);
+  const { canvas: roughCanvas, ctx: roughCtx } = surface(width, heightPx);
+  const img = ctx.createImageData(width, heightPx);
+  const rough = roughCtx.createImageData(width, heightPx);
+  const height = new Float32Array(width * heightPx);
 
-  const img = ctx.createImageData(size, size);
+  const mod = (a, n) => a - n * Math.floor(a / n);
+  const groove = 0.035;
+  const bevelW = 0.07;
 
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = (x / size) * 8;
-      const v = (y / size) * 8;
-      const grain = fbm(noise, u, v, 5);
-      const wear = Math.max(0, fbm(noise, u * 0.35, v * 0.35, 3)) * 0.6;
+  for (let y = 0; y < heightPx; y++) {
+    for (let x = 0; x < width; x++) {
+      const px = x / cellPx;
+      const py = (y / heightPx) * rows * SQ3;
 
-      const gx = Math.min(x % cell, cell - (x % cell));
-      const gy = Math.min(y % cell, cell - (y % cell));
-      const isJoint = Math.min(gx, gy) < joint;
+      // Dos rejillas desplazadas; gana el centro mas cercano.
+      const ax = mod(px, 1) - 0.5;
+      const ay = mod(py, SQ3) - SQ3 / 2;
+      const bx = mod(px - 0.5, 1) - 0.5;
+      const by = mod(py - SQ3 / 2, SQ3) - SQ3 / 2;
+      const useA = ax * ax + ay * ay < bx * bx + by * by;
+      const gx = useA ? ax : bx;
+      const gy = useA ? ay : by;
 
-      const plateX = Math.floor(x / cell);
-      const plateY = Math.floor(y / cell);
-      const plateTone = (valueNoise(seed + plateX * 31 + plateY * 17)(plateX * 0.7, plateY * 0.3) + 1) / 2;
+      // Distancia al borde del hexagono (vertices arriba, apotema 0.5).
+      const hexR = Math.max(Math.abs(gx), 0.5 * Math.abs(gx) + (SQ3 / 2) * Math.abs(gy));
+      const edge = 0.5 - hexR;
 
-      // Mojadez: cuencas anchas + detalle fino, con contraste fuerte para que
-      // queden bolsas definidas y mucho suelo seco entre ellas.
-      const wu = (x / size) * 3.2;
-      const wv = (y / size) * 3.2;
-      let wn = fbm(wetNoise, wu, wv, 5) * 0.5 + 0.5;
-      wn = wn * 0.78 + (fbm(wetNoise, wu * 5, wv * 5, 4) * 0.5 + 0.5) * 0.22;
-      const wet = Math.max(0, Math.min(1, (wn - 0.44) / 0.3));
+      // Identificador de celda, reducido al periodo para que la variacion por
+      // panel tambien encaje en el tileado.
+      const cx = Math.round((px - gx) * 2);
+      const cy = Math.round(((py - gy) / SQ3) * 2);
+      const id = mod(cx, cols * 2) * 131 + mod(cy, rows * 2) * 71;
+      const panel = valueNoise(seed + id)(0.31, 0.77) * 0.5 + 0.5;
 
-      // El agua se ennegrece el pavement y lo satura.
-      const base = (0.10 + plateTone * 0.035 + grain * 0.03 + wear * 0.05) * (1 - wet * 0.45);
-      const i = (y * size + x) * 4;
-      const c = isJoint ? base * 0.35 : base;
-      img.data[i] = c * 255 * 1.0;
-      img.data[i + 1] = c * 255 * 1.08;
-      img.data[i + 2] = c * 255 * 1.2;
+      const grain = fbm(noise, px * 6, py * 6, 3);
+      const inGroove = edge < groove;
+      const bevel = Math.min(1, Math.max(0, (edge - groove) / bevelW));
+
+      const i = (y * width + x) * 4;
+      // Valores en sRGB (ver stoneFloor): ~0.17 son ~0.025 en lineal.
+      const c = inGroove ? 0.05 : 0.15 + panel * 0.05 + grain * 0.015;
+      img.data[i] = c * 255;
+      img.data[i + 1] = c * 255 * 1.03;
+      img.data[i + 2] = c * 255 * 1.06;
       img.data[i + 3] = 255;
 
-      // Aqui esta el efecto: rugosidad alta en seco, espejo en el charco.
-      const dry = isJoint ? 0.95 : 0.35 + wear * 0.4 + Math.abs(grain) * 0.2;
-      const r = dry * (1 - wet) + 0.05 * wet;
+      const r = inGroove ? 0.95 : 0.32 + panel * 0.3 + Math.abs(grain) * 0.12;
       const value = Math.min(1, Math.max(0, r)) * 255;
       rough.data[i] = value;
       rough.data[i + 1] = value;
       rough.data[i + 2] = value;
       rough.data[i + 3] = 255;
 
-      // Ondas: solo dentro del agua, para que el seco quede mate.
-      const ripple = wet > 0 ? fbm(wetNoise, u * 9 + 31, v * 9, 3) * 0.55 * wet : 0;
-      height[y * size + x] = (isJoint ? -1 : grain * 0.25 + wear * 0.15) + ripple;
+      height[y * width + x] = bevel + grain * 0.02;
     }
   }
 
@@ -344,59 +311,11 @@ export function wetLabFloor({ size = 1024, repeat = 10, seed = 21, wetSeed = 19 
   roughCtx.putImageData(rough, 0, 0);
 
   const result = {
-    map: finish(canvas, { repeat, srgb: true }),
-    roughnessMap: finish(roughCanvas, { repeat }),
-    normalMap: finish(normalFromHeight(height, size, 2.6), { repeat }),
-  };
-  cache.set(key, result);
-  return result;
-}
-
-/**
- * Panel de pared con juntas horizontales y tornillos.
- * Principalmente aporta rugosidad y relieve; el color va en el material.
- */
-export function wallPanels({ size = 512, repeat = 6, seed = 33 } = {}) {
-  const key = `wall-${size}-${seed}`;
-  if (cache.has(key)) return cache.get(key);
-
-  const noise = valueNoise(seed);
-  const { canvas: roughCanvas, ctx: roughCtx } = surface(size);
-  const rough = roughCtx.createImageData(size, size);
-  const height = new Float32Array(size * size);
-
-  const bands = 4;
-  const bandH = size / bands;
-  const joint = size * 0.004;
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const inBand = y % bandH;
-      const nearJoint = inBand < joint || inBand > bandH - joint;
-
-      // Tornillos en las esquinas de cada panel.
-      const bandIndex = Math.floor(y / bandH);
-      const holeX = size * 0.06;
-      const screw =
-        Math.hypot(x - holeX, inBand - bandH * 0.5) < size * 0.012 ? 1 : 0;
-
-      const grain = fbm(noise, (x / size) * 5, (y / size) * 5, 4);
-      const r = nearJoint || screw ? 0.9 : 0.45 + grain * 0.25;
-      const i = (y * size + x) * 4;
-      const value = Math.min(1, Math.max(0, r)) * 255;
-      rough.data[i] = value;
-      rough.data[i + 1] = value;
-      rough.data[i + 2] = value;
-      rough.data[i + 3] = 255;
-
-      height[y * size + x] = nearJoint ? -1 : screw ? -0.6 : grain * 0.2;
-    }
-  }
-  roughCtx.putImageData(rough, 0, 0);
-
-  const result = {
-    roughnessMap: finish(roughCanvas, { repeat }),
-    normalMap: finish(normalFromHeight(height, size, 2.6), { repeat }),
+    map: finish(canvas, { srgb: true }),
+    roughnessMap: finish(roughCanvas),
+    normalMap: finish(normalFromHeight(height, width, 1.6, heightPx)),
+    /** Proporcion alto/ancho de una repeticion, para calcular el `repeat`. */
+    aspect: heightPx / width,
   };
   cache.set(key, result);
   return result;

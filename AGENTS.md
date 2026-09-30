@@ -46,10 +46,14 @@ dentro de un literal GLSL**: cierra el template y tumba la escena entera con un
 
 ## Texturas: procedural o ComfyUI
 
-`src/scene/textures.js` genera las texturas en un `<canvas>` (metal, suelo,
-paredes). Son el sustituto de los assets y funcionan sin nada externo.
+`src/scene/textures.js` genera las texturas en un `<canvas>` (losas de piedra
+del suelo, paneles hexagonales del muro). Son el sustituto de los assets y
+funcionan sin nada externo.
 
-Si hay imágenes generadas en `public/textures/`, se cargan en su lugar. Ese es
+Si hay imágenes generadas en `public/textures/`, pueden cargarse en su lugar
+(`upgradeWithComfy`). Ahora mismo no se usa ninguna: las que hay son chapa
+cepillada y no encajan con el muro hexagonal. `environment.materials` está
+vacío a propósito. Ese es
 el punto de extensión para ComfyUI: `tools/generate-textures.mjs` las produce
 vía la API HTTP y la app las consume como ficheros estáticos, sin dependencia
 en runtime. ComfyUI vive fuera del repo, en `C:\AI\ComfyUI_windows_portable`.
@@ -57,6 +61,52 @@ en runtime. ComfyUI vive fuera del repo, en `C:\AI\ComfyUI_windows_portable`.
 El realismo depende de PBR, no de bloom: `MeshStandardMaterial` con
 `roughnessMap` + `normalMap` + `scene.environment` (PMREM). Un `MeshBasicMaterial`
 coloreado no refleja nada y se lee plano por muchos efectos que se le sumen.
+
+## Dirección de arte
+
+Museo futurista sellado durante milenios (referencia del usuario: sala oscura,
+paneles hexagonales, contraluz de una rendija vertical, filos LED, suelo
+mojado). Reglas:
+
+- **Una sola familia de luz**: blanco frío, en `src/scene/palette.js`. Nada
+  de neones por objeto. El rango de un logro se lee en el material (bronce,
+  plata, oro), no en un color de luz.
+- **Objetos físicos, no hologramas**: cerámica negra lacada, piedra pulida,
+  vidrio con transmisión. Nada de wireframes ni aros aditivos.
+- **El polvo solo se ve donde hay luz** (`dust.js`): cono del foco, junto a
+  las rendijas y cerca del reactor.
+- **El agua es un campo en coordenadas de mundo** (`wetMask` en `wet.js`),
+  compartido por el material del suelo y el reflejo. Nunca en la textura: se
+  repetiría con ella.
+- **La interfaz usa la misma paleta** (`style.css`): negro neutro, acento
+  `--accent` (blanco frío), rojo y verde apagados solo con significado.
+- **Matices de materia**: seis blancos fríos (`SUBJECT_TINTS` en
+  `scene/palette.js` y `--tint-0..5` en CSS, deben coincidir). El índice
+  (`tint`) lo calcula `core/stats.js` por orden de primera aparición, no por
+  minutos: así el color de una materia no salta al cambiar el ranking.
+
+## Mapa de la escena
+
+- `environment.js`: rotonda, suelo, rendijas (`setSlitsEnabled`), bañadores
+  de pared, tarima, foco del techo, escena mínima para el mapa de entorno.
+- `reactor.js`: giroscopio de cerámica, vidrio con núcleo, cable.
+  `lowestPoint` es de donde caen las gotas a la fuente.
+- `fountain.js`: pilón, agua con simulación de ondas en GPU
+  (`GPUComputationRenderer`, 256²), cáusticas en el fondo, gotas del reactor
+  y brisa.
+- `wet.js`: suelo mojado (máscara + reflejo), `NO_REFLECTION_LAYER`,
+  `guardReflector`.
+- `wind.js`: tres corrientes con ráfagas aleatorias; los shaders solo leen
+  el desplazamiento acumulado.
+- `air.js`: cuánta luz recibe un punto del aire. La comparten polvo y niebla.
+- `dust.js`: polvo, iluminado por `airLight` y arrastrado por el viento.
+- `audio.js`: sonido de ambiente procedural (Web Audio, sin ficheros): tono
+  de sala, zumbido posicional del reactor, viento por corriente, agua y
+  gotas en su punto de impacto, crujidos lejanos, reverb de bóveda generada.
+  Los parámetros salen de `core/soundscape.js` (puro, con tests).
+- `mist.js`: niebla volumétrica. Es un pase de post-proceso (raymarching
+  contra la profundidad de la escena), no geometría. Necesita las
+  `DepthTexture` de los render targets del composer (`postfx.js`).
 
 ## Fechas
 
@@ -125,6 +175,86 @@ trae `?t=`, es una versión anterior: el fichero en disco manda.** Verificar con
   negativos explícitos.
 - El estado vacío de la escena debe seguir leyéndose: comprobar con captura y
   sin datos, no solo con datos.
+- **Los albedos del canvas están en sRGB.** Pintar `0.03` en una textura
+  `SRGBColorSpace` son `0.002` en lineal: más negro que el terciopelo, y
+  ninguna luz lo saca. La piedra negra real ronda 0.04 lineal, unos 0.2 en el
+  canvas. Si una superficie no reacciona a la luz, sospechar de esto.
+- **El velo lechoso sobre toda la imagen era el bloom**, no la luz: emisivos
+  HDR muy altos (14×) se esparcen por los niveles gruesos del bloom aunque la
+  fuerza sea baja. Emisivos ≤ 6, `radius 0`, `threshold 1.0`. Para aislarlo:
+  apagar todas las luces; si el suelo sigue gris, es post-proceso.
+- **El mapa de entorno se construye con la propia sala**
+  (`createEnvironmentMapScene`): negra con las rendijas. `RoomEnvironment`
+  es blanca y quemaba el metal en rasante.
+- **`RectAreaLight` necesita `RectAreaLightUniformsLib.init()`** o no
+  ilumina nada, y emite hacia su `-Z` (al revés que un mesh tras
+  `lookAt`).
+- **Vidrio esmerilado + núcleo brillante = bola blanca plana.** La
+  transmisión con rugosidad reparte el núcleo por toda la esfera. Vidrio claro
+  (`roughness` ~0.04) y núcleo contenido.
+- **Las etiquetas van en la capa 1**: la cámara principal la ve y la del
+  `Reflector` no. Si no, las placas de texto aparecen en los charcos.
+- `PCFSoftShadowMap` ya no existe en esta versión de Three: usar
+  `PCFShadowMap`.
+- **Cada `Reflector` debe pasar por `guardReflector`.** Si no, con dos
+  reflectores cada uno re-renderiza la escena dentro del reflejo del otro, y
+  los dos se repiten en la pasada de profundidad del DOF.
+- **Polvo invisible no es polvo roto.** Las motas son subpíxel y solo brillan
+  dentro de un haz: la intensidad tiene que ser alta (~10). Para depurarlo,
+  subir `uIntensity` a 40 en vivo y ver dónde están.
+- **La simulación de agua con gotas pequeñas (pocas celdas) da ruido en
+  cruz**: la malla dispersa las altas frecuencias por los ejes. Gotas de
+  radio ≥ 6-7 celdas.
+- **Velocidad de las ondas = `uSpeed` (k = c²).** La fórmula clásica de
+  «media de vecinos» es k = 0.5: a 60 Hz, ondas de 1.5 m/s, nerviosas. Con
+  k = 0.045 van a ~0.2 m/s. Al bajar k hay que subir la amortiguación por
+  paso (0.9965) o las ondas mueren antes de llegar a la pared.
+- **Pared del agua: Neumann, no Dirichlet.** Fijar la altura a 0 fuera del
+  círculo invierte la onda al rebotar y se siente falso. El vecino exterior
+  toma la altura de la celda actual.
+- **Gotas siempre en el mismo punto = anillo perfecto.** Posición aleatoria y
+  salpicaduras satélite desfasadas.
+- **Niebla con capas horizontales = anillos en las columnas.** Cada capa
+  corta la geometría en una línea que parpadea al moverse el ruido. Por eso
+  la niebla es volumétrica. No volver a capas ni a billboards sin depth.
+- **Puntos de 1 px con MSAA titilan**: la cobertura de muestras cambia con la
+  posición subpíxel. El polvo se dibuja a 2.5-3 px con el brillo repartido
+  por el área real.
+- **El grano de película animado se lee como parpadeo** si pasa de ~0.02.
+- **Una cruz oscura en el fondo de la fuente es la sombra de los anillos**,
+  proyectada por el foco que tienen encima. Es correcta.
+- Las capturas del panel del navegador se reducen a 800 px: a 1400 de
+  viewport, lo subpíxel (polvo) desaparece. Para verlo, viewport a 800.
+
+### Sonido
+
+- **`AudioContext` solo arranca con un gesto real** (click o tecla). Un
+  `setSoundEnabled(true)` desde la consola o desde `javascript_exec` no
+  cuenta. El HUD lo arranca en el primer `pointerdown`/`keydown` si la
+  preferencia (`localStorage` `studyLab.sound`) lo permite.
+- **No se puede oír desde aquí: se mide.** Parchear
+  `AudioNode.prototype.connect` antes del primer gesto para meter un
+  `AnalyserNode` delante de `destination` y leer picos en dBFS. Referencia:
+  fondo ≈ −30 dBFS en la vista general, gota ≈ −13 de pico.
+- Para probar sin mover la cámara, el primer gesto debe ser una tecla: un
+  click en el vacío devuelve la cámara a la vista general.
+- **El envío al eco se toma antes del panner, no después.** Si pasa por la
+  atenuación por distancia, la proporción directo/eco es la misma a cualquier
+  distancia y todo suena igual de cerca. Cada fuente con posición es una voz
+  espacial (`spatial()` en `audio.js`): directo con filtro de aire + panner,
+  y eco casi constante (`reverbSend`).
+- Para comprobar la distancia sin oír: medir por bandas con
+  `getFloatFrequencyData` en varias posiciones de cámara. Junto a una fuente
+  debe subir su banda (reactor: graves; radio: medios y agudos) y el resto no.
+
+### Interfaz
+
+- **`el()` con `style` no aplicaba variables CSS**: `Object.assign` sobre
+  `node.style` ignora `--algo` sin error. Ahora usa `setProperty` para
+  ellas. Por eso el color de rango de las tarjetas de logros nunca se veía.
+- **El HUD pasa por debajo del panel lateral.** Sin el `padding-right` del
+  ancho del panel, los controles de cámara (incluido volver a la vista
+  general) quedaban tapados.
 
 ### Escalas y visualización
 - **Escala lineal aplasta datos desiguales.** Las materias con pocas horas
