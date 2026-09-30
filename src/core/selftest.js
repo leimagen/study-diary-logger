@@ -8,6 +8,7 @@ import { validateSession, formatDuration, createSession } from './model.js';
 import { computeStreaks, computeAll, heatmap, bySubject } from './stats.js';
 import { sessionXP, totalXP, levelProgress, xpForLevel, evaluateAchievements } from './gamification.js';
 import { createStore } from './store.js';
+import { reactorHum, windVoice, dropVoice, windPan, airCutoff, reverbSend, morseSequence, VOWELS } from './soundscape.js';
 
 let failures = 0;
 let count = 0;
@@ -190,6 +191,30 @@ check('export es JSON', JSON.parse(exported).sessions.length, 1);
 const store2 = createStore();
 ok('import ok', store2.import(exported).ok);
 check('import conserva sesiones', store2.getState().sessions.length, 1);
+
+console.log('\n── sonido ──');
+ok('zumbido sube con la energía', reactorHum(1).gain > reactorHum(0).gain && reactorHum(1).freq > reactorHum(0).freq);
+check('zumbido acota la energía', reactorHum(5), reactorHum(1));
+check('viento en calma no suena', windVoice(0.02).gain, 0);
+ok('ráfaga suena más y más aguda', windVoice(0.5).gain > windVoice(0.2).gain && windVoice(0.5).freq > windVoice(0.2).freq);
+{
+  const fixed = () => 0.5;
+  const small = dropVoice(0.3, 0.06, fixed);
+  const big = dropVoice(0.3, 0.3, fixed);
+  ok('gota grande más grave', big.startFreq < small.startFreq);
+  ok('la burbuja sube de tono', small.endFreq > small.startFreq);
+  check('gota sin fuerza no suena', dropVoice(0, 0.1, fixed).gain, 0);
+}
+check('paneo: viento hacia la derecha', windPan(1, 0, 1, 0), 0.7);
+check('paneo: sin viento, centrado', windPan(0, 0, 1, 0), 0);
+
+ok('lejos suena más apagado', airCutoff(30) < airCutoff(5) && airCutoff(5) < airCutoff(0));
+ok('distancia negativa no rompe el filtro', airCutoff(-3) === airCutoff(0));
+ok('el eco apenas cambia con la distancia', reverbSend(40, 1) / reverbSend(0, 1) < 2);
+ok('de lejos, algo más de eco', reverbSend(30, 1) > reverbSend(2, 1));
+check('morse de SOS', morseSequence('sos').map(([on, u]) => (on ? (u === 1 ? '.' : '-') : u === 3 ? ' ' : '')).join(''), '... --- ...');
+check('morse ignora símbolos raros', morseSequence('ñ'), []);
+ok('cinco vocales con tres formantes', Object.values(VOWELS).every((f) => f.length === 3));
 
 console.log(`\n${failures === 0 ? '✅' : '❌'} ${count - failures}/${count} comprobaciones correctas\n`);
 process.exit(failures === 0 ? 0 : 1);

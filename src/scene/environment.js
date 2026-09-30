@@ -32,6 +32,7 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
+  PointLight,
   RectAreaLight,
   Scene,
   SpotLight,
@@ -291,6 +292,50 @@ function createWallWashers({ count = 8 } = {}) {
   return group;
 }
 
+/**
+ * Transmisor junto al muro: de aqui sale la radio (audio.js). Una caja de
+ * ceramica negra con un piloto que late despacio; sin un objeto al que
+ * mirar, un sonido posicional parece salir de la nada.
+ */
+function createTransmitter(position) {
+  const group = new Group();
+  group.position.copy(position).setY(0);
+  group.lookAt(0, 0, 0);
+
+  const body = new Mesh(
+    new BoxGeometry(0.9, 1.1, 0.5),
+    new MeshPhysicalMaterial({ color: SURFACE.ceramic, roughness: 0.35, clearcoat: 0.6 }),
+  );
+  body.position.y = 0.55;
+  body.castShadow = true;
+  body.receiveShadow = true;
+
+  // Rejilla del altavoz: lamas finas en la cara frontal.
+  const slatMat = new MeshStandardMaterial({ color: 0x030304, roughness: 0.8 });
+  for (let i = 0; i < 6; i++) {
+    const slat = new Mesh(new BoxGeometry(0.62, 0.025, 0.02), slatMat);
+    slat.position.set(0, 0.52 + i * 0.06, 0.255);
+    group.add(slat);
+  }
+
+  const lamp = new Mesh(new CircleGeometry(0.022, 16), ledMaterial(0));
+  lamp.position.set(0.3, 0.95, 0.252);
+
+  // Filo LED en el canto superior, como el resto de piezas de la sala: sin
+  // el, la caja era una silueta negra que no se distinguia del muro.
+  const edge = new Mesh(new BoxGeometry(0.9, 0.012, 0.012), ledMaterial(1.8));
+  edge.position.set(0, 1.1, 0.25);
+
+  // Luz tenue delante: deja su reflejo en el suelo mojado.
+  // Baja y adelantada: a la altura de la tapa se reflejaba en la laca como
+  // un destello.
+  const glow = new PointLight(LIGHT.cold, 0.7, 5, 2);
+  glow.position.set(0, 0.35, 0.9);
+
+  group.add(body, lamp, edge, glow);
+  return { group, lamp };
+}
+
 /** Zocalo luminoso: marca el limite de la sala y da escala. */
 function createBaseStrip() {
   const band = new Mesh(
@@ -347,7 +392,7 @@ export function createEnvironmentMapScene({ slits = true } = {}) {
 /* Composicion                                                        */
 /* ------------------------------------------------------------------ */
 
-export function createEnvironment(scene) {
+export function createEnvironment(scene, { transmitterPosition } = {}) {
   // Niebla casi negra y ligera: apaga el fondo sin velar las rendijas.
   scene.fog = new FogExp2(0x010203, 0.012);
 
@@ -368,6 +413,9 @@ export function createEnvironment(scene) {
     createBaseStrip(),
   );
   scene.add(group);
+
+  const transmitter = transmitterPosition ? createTransmitter(transmitterPosition) : null;
+  if (transmitter) group.add(transmitter.group);
 
   // Un minimo de rebote para que las caras en sombra no sean negro absoluto.
   scene.add(new HemisphereLight(0x9bb4c8, 0x000000, 0.02));
@@ -401,6 +449,10 @@ export function createEnvironment(scene) {
       time += dt;
       const boost = 1 + Math.min(streak, 30) * 0.012;
       ceilingLight.spot.intensity = 420 * boost * (1 + Math.sin(time * 0.4) * 0.02);
+      if (transmitter) {
+        const pulse = 0.5 + 0.5 * Math.sin(time * 1.3);
+        transmitter.lamp.material.color.set(LIGHT.cold).multiplyScalar(0.4 + pulse * pulse * 2.2);
+      }
     },
   };
 }

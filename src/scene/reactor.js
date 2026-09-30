@@ -111,6 +111,11 @@ export function createReactor({ position = [0, 3.7, 0], ceiling = 16 } = {}) {
     /** Punto mas bajo del anillo exterior: de ahi caen las gotas a la fuente. */
     lowestPoint: position[1] - cableBottom,
 
+    /** Energia actual, interpolada (0..1). */
+    get energy() {
+      return energy;
+    },
+
     /** Racha -> energia normalizada (satura a los 30 dias). */
     setStreak(streak) {
       targetEnergy = Math.min(1, streak / ENERGY_SATURATION);

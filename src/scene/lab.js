@@ -32,6 +32,7 @@ import { createMistPass } from './mist.js';
 import { createWind } from './wind.js';
 import { createAirUniforms } from './air.js';
 import { createFountain } from './fountain.js';
+import { createSoundscape } from './audio.js';
 import { createSubjectTowers } from './towers.js';
 import { createWetReflection } from './wet.js';
 import { createAchievementPedestals } from './pedestals.js';
@@ -105,7 +106,10 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   // Sin esto los RectAreaLight de las rendijas no iluminan nada.
   RectAreaLightUniformsLib.init();
 
-  const environment = createEnvironment(scene);
+  // Transmisor de radio junto al muro, lejos de la vista inicial: la radio
+  // debe sonar al fondo.
+  const RADIO_POSITION = new Vector3(-19.5, 1.0, -21);
+  const environment = createEnvironment(scene, { transmitterPosition: RADIO_POSITION });
 
   /**
    * Mapa de entorno construido con la propia boveda: negra, con las rendijas
@@ -145,11 +149,21 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
   scene.add(wet.mesh);
   wet.attachTo(camera);
 
+  // Sonido de ambiente. No suena hasta setSoundEnabled(true) desde un gesto.
+  const daisTop = ROOM.dais[ROOM.dais.length - 1][1];
+  const sound = createSoundscape({
+    camera,
+    reactorPosition: reactor.group.position,
+    fountainPosition: new Vector3(0, daisTop + 0.42, 0),
+    radioPosition: RADIO_POSITION,
+  });
+
   const fountain = createFountain({
     renderer,
     camera,
-    baseY: ROOM.dais[ROOM.dais.length - 1][1],
+    baseY: daisTop,
     dripFrom: reactor.lowestPoint,
+    onSplash: (x, y, z, amplitude, radius) => sound.drop(x, y, z, amplitude, radius),
   });
   scene.add(fountain.group);
 
@@ -290,6 +304,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
     air.uCoreEnergy.value = 0.15 + (Math.min(currentStreak, 30) / 30) * 0.5;
     dust.update(dt);
     mist.update(dt);
+    sound.update(dt, { energy: reactor.energy, wind: wind.velocities });
     sparks.update(dt);
     controls.update();
 
@@ -468,6 +483,14 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
       return slitsOn;
     },
 
+    /** Sonido de ambiente. Activarlo requiere un gesto del usuario. */
+    setSoundEnabled(on) {
+      sound.setEnabled(on);
+    },
+    get soundEnabled() {
+      return sound.enabled;
+    },
+
     /** Niebla baja: 0 la apaga, 1 es la densidad por defecto. */
     setMistDensity(k) {
       mist.setDensity(k);
@@ -491,6 +514,7 @@ export function createLab({ canvas, container, onAchievementClick } = {}) {
       sparks.dispose();
       dust.dispose();
       mist.dispose();
+      sound.dispose();
       fountain.dispose();
       wet.dispose();
       reactor.dispose();

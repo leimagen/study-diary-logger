@@ -64,6 +64,8 @@ export function createWind({ maxSpeed = 0.55 } = {}) {
 
   return {
     uniforms,
+    /** Velocidad actual de cada corriente (la usa el sonido del viento). */
+    velocities: currents.map((c) => c.velocity),
     update(dt) {
       for (const current of currents) {
         current.timer -= dt;

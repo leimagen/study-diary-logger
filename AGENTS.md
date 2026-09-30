@@ -100,6 +100,10 @@ mojado). Reglas:
   el desplazamiento acumulado.
 - `air.js`: cuánta luz recibe un punto del aire. La comparten polvo y niebla.
 - `dust.js`: polvo, iluminado por `airLight` y arrastrado por el viento.
+- `audio.js`: sonido de ambiente procedural (Web Audio, sin ficheros): tono
+  de sala, zumbido posicional del reactor, viento por corriente, agua y
+  gotas en su punto de impacto, crujidos lejanos, reverb de bóveda generada.
+  Los parámetros salen de `core/soundscape.js` (puro, con tests).
 - `mist.js`: niebla volumétrica. Es un pase de post-proceso (raymarching
   contra la profundidad de la escena), no geometría. Necesita las
   `DepthTexture` de los render targets del composer (`postfx.js`).
@@ -221,6 +225,27 @@ trae `?t=`, es una versión anterior: el fichero en disco manda.** Verificar con
   proyectada por el foco que tienen encima. Es correcta.
 - Las capturas del panel del navegador se reducen a 800 px: a 1400 de
   viewport, lo subpíxel (polvo) desaparece. Para verlo, viewport a 800.
+
+### Sonido
+
+- **`AudioContext` solo arranca con un gesto real** (click o tecla). Un
+  `setSoundEnabled(true)` desde la consola o desde `javascript_exec` no
+  cuenta. El HUD lo arranca en el primer `pointerdown`/`keydown` si la
+  preferencia (`localStorage` `studyLab.sound`) lo permite.
+- **No se puede oír desde aquí: se mide.** Parchear
+  `AudioNode.prototype.connect` antes del primer gesto para meter un
+  `AnalyserNode` delante de `destination` y leer picos en dBFS. Referencia:
+  fondo ≈ −30 dBFS en la vista general, gota ≈ −13 de pico.
+- Para probar sin mover la cámara, el primer gesto debe ser una tecla: un
+  click en el vacío devuelve la cámara a la vista general.
+- **El envío al eco se toma antes del panner, no después.** Si pasa por la
+  atenuación por distancia, la proporción directo/eco es la misma a cualquier
+  distancia y todo suena igual de cerca. Cada fuente con posición es una voz
+  espacial (`spatial()` en `audio.js`): directo con filtro de aire + panner,
+  y eco casi constante (`reverbSend`).
+- Para comprobar la distancia sin oír: medir por bandas con
+  `getFloatFrequencyData` en varias posiciones de cámara. Junto a una fuente
+  debe subir su banda (reactor: graves; radio: medios y agudos) y el resto no.
 
 ### Interfaz
 

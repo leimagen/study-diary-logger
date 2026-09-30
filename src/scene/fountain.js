@@ -185,11 +185,19 @@ const WATER_SHADER = {
 /* ------------------------------------------------------------------ */
 
 /**
- * @param {{renderer: import('three').WebGLRenderer, camera: import('three').Camera, baseY: number, dripFrom?: number}} options
+ * @param {{renderer: import('three').WebGLRenderer, camera: import('three').Camera, baseY: number, dripFrom?: number, onSplash?: Function}} options
  *   baseY: altura de la tarima donde se apoya el pilon.
  *   dripFrom: altura desde la que caen las gotas (punto bajo del reactor).
  */
-export function createFountain({ renderer, camera, baseY, dripFrom = 1.8, innerRadius = 2.35, outerRadius = 2.6 }) {
+export function createFountain({
+  renderer,
+  camera,
+  baseY,
+  dripFrom = 1.8,
+  innerRadius = 2.35,
+  outerRadius = 2.6,
+  onSplash = null,
+}) {
   const group = new Group();
   const wallTop = baseY + 0.52;
   const floorY = baseY + 0.03;
@@ -231,6 +239,8 @@ export function createFountain({ renderer, camera, baseY, dripFrom = 1.8, innerR
    */
   function splash(x, z, amplitude, radius) {
     drop(x, z, amplitude, radius);
+    // Solo los impactos suenan; la brisa (drop directo) no.
+    onSplash?.(x, waterY, z, amplitude, radius);
     const satellites = 1 + Math.floor(Math.random() * 3);
     for (let i = 0; i < satellites; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -396,6 +406,8 @@ export function createFountain({ renderer, camera, baseY, dripFrom = 1.8, innerR
   return {
     group,
     water,
+    /** Altura de la superficie del agua (para situar sonidos). */
+    waterY,
     /** Objetos sobre los que un click cuenta como tocar el agua. */
     raycastTarget: water,
     drop: (x, z) => splash(x, z, 0.45, 0.22),
