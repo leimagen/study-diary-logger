@@ -55,8 +55,10 @@ export function createSession(input = {}) {
     subject: clean(input.subject, LIMITS.subject),
     topic: clean(input.topic, LIMITS.topic),
     minutes: clampInt(input.minutes, LIMITS.minutes),
-    difficulty: clampInt(input.difficulty, LIMITS.rating),
-    energy: clampInt(input.energy, LIMITS.rating),
+    // Una valoración ausente (datos antiguos o importados) es neutra, no la
+    // mínima: sin dato no hay motivo para contarla como "Agotado".
+    difficulty: clampInt(input.difficulty, LIMITS.rating, NEUTRAL_RATING),
+    energy: clampInt(input.energy, LIMITS.rating, NEUTRAL_RATING),
     notes: clean(input.notes, LIMITS.notes),
     createdAt: input.createdAt ?? now.toISOString(),
   };
@@ -103,9 +105,13 @@ export function validateSession(input) {
   return { ok: true, errors: {}, value: createSession({ ...input, date, subject, topic, notes: input.notes }) };
 }
 
-function clampInt(value, { min, max }) {
+/** Valoración por defecto cuando falta: el punto medio de la escala 1-5. */
+const NEUTRAL_RATING = 3;
+
+function clampInt(value, { min, max }, fallback = min) {
+  if (value === undefined || value === null || value === '') return fallback;
   const n = Math.round(Number(value));
-  if (!Number.isFinite(n)) return min;
+  if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
 

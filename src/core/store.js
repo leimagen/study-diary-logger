@@ -6,7 +6,7 @@
  */
 
 import { load, save, clearAll, exportJSON, importJSON, storageAvailable } from './storage.js';
-import { validateSession } from './model.js';
+import { createSession, validateSession } from './model.js';
 import { computeAll } from './stats.js';
 import { evaluateAchievements, totalXP, levelProgress, sessionXP } from './gamification.js';
 
@@ -96,9 +96,12 @@ export function createStore() {
       return { ok: true };
     },
 
-    /** Reemplaza todas las sesiones (importación). */
+    /**
+     * Reemplaza todas las sesiones (importación). Se normalizan igual que al
+     * leer de disco: una sesión sin 'energy' daba XP NaN en toda la app.
+     */
     replaceAll(list) {
-      sessions = list;
+      sessions = (Array.isArray(list) ? list : []).map((s) => createSession(s));
       unlockedIds = []; // se recalculan: el import puede desbloquear todo
       commit();
       return { ok: true, count: sessions.length };

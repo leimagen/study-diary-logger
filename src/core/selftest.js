@@ -192,6 +192,25 @@ const store2 = createStore();
 ok('import ok', store2.import(exported).ok);
 check('import conserva sesiones', store2.getState().sessions.length, 1);
 
+console.log('\n── importación sin valoraciones ──');
+{
+  // Sesiones antiguas o hechas a mano pueden no traer energía ni dificultad.
+  const legacy = [{ id: 'x1', date: RT, subject: 'Latín', topic: 'Declinaciones', minutes: 40 }];
+
+  const s1 = createStore();
+  s1.replaceAll(legacy);
+  ok('replaceAll: XP finita sin energía', Number.isFinite(s1.getState().xp));
+  check('replaceAll: energía ausente es neutra', s1.getState().sessions[0].energy, 3);
+  check('replaceAll: dificultad ausente es neutra', s1.getState().sessions[0].difficulty, 3);
+
+  const s2 = createStore();
+  ok('import sin energía', s2.import(JSON.stringify({ sessions: legacy })).ok);
+  ok('import: XP finita sin energía', Number.isFinite(s2.getState().xp));
+
+  check('valoración explícita se respeta', createSession({ energy: 1 }).energy, 1);
+  check('valoración fuera de rango se acota', createSession({ energy: 9 }).energy, 5);
+}
+
 console.log('\n── sonido ──');
 ok('zumbido sube con la energía', reactorHum(1).gain > reactorHum(0).gain && reactorHum(1).freq > reactorHum(0).freq);
 check('zumbido acota la energía', reactorHum(5), reactorHum(1));
