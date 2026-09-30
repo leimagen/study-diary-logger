@@ -18,6 +18,7 @@ import { createAchievementsPanel } from './ui/achievements.js';
 import { el, $ } from './ui/dom.js';
 import { formatDuration } from './core/model.js';
 import { storageAvailable } from './core/storage.js';
+import { generateDemoSessions } from './core/demo.js';
 
 /* ------------------------------------------------------------------ */
 /* Montaje                                                             */
@@ -145,6 +146,26 @@ panelHost.append(tabBar, tabBody);
 /* Datos: import / export / reset                                     */
 /* ------------------------------------------------------------------ */
 
+// Datos de ejemplo: solo mientras no hay sesiones, para no pisar nunca un
+// historial real. Es la puerta de entrada de quien llega a la demo publica.
+const demoButton = el('button', {
+  class: 'btn btn--demo',
+  type: 'button',
+  text: 'Cargar datos de ejemplo',
+  title: 'Siete semanas de estudio inventadas, para ver la sala con vida',
+  onClick: () => {
+    if (store.getState().sessions.length > 0) return;
+    const { count } = store.replaceAll(generateDemoSessions());
+    hud.showToast({
+      icon: '🧪',
+      kind: 'session',
+      title: 'Datos de ejemplo cargados',
+      message: count + ' sesiones. «Borrar todo» los quita.',
+      duration: 4200,
+    });
+  },
+});
+
 const dataActions = el('div', { class: 'data-actions' }, [
   el('button', {
     class: 'btn btn--ghost',
@@ -192,7 +213,7 @@ const dataActions = el('div', { class: 'data-actions' }, [
   }),
 ]);
 
-panelHost.append(dataActions);
+panelHost.append(demoButton, dataActions);
 renderTab('log');
 
 if (!storageAvailable) {
@@ -214,6 +235,8 @@ store.subscribe((state) => {
 
   // La escena 3D refleja el estado: racha, materias y logros.
   lab.sync(state);
+
+  demoButton.hidden = state.sessions.length > 0;
 
   hud.update(state);
   // Los paneles de datos consumen el bloque `stats`; el de logros, el estado completo.

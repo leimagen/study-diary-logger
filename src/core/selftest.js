@@ -8,6 +8,7 @@ import { validateSession, formatDuration, createSession } from './model.js';
 import { computeStreaks, computeAll, heatmap, bySubject } from './stats.js';
 import { sessionXP, totalXP, levelProgress, xpForLevel, evaluateAchievements } from './gamification.js';
 import { createStore } from './store.js';
+import { generateDemoSessions, DEMO_STREAK } from './demo.js';
 import { reactorHum, windVoice, dropVoice, windPan, airCutoff, reverbSend, morseSequence, VOWELS } from './soundscape.js';
 
 let failures = 0;
@@ -209,6 +210,24 @@ console.log('\n── importación sin valoraciones ──');
 
   check('valoración explícita se respeta', createSession({ energy: 1 }).energy, 1);
   check('valoración fuera de rango se acota', createSession({ energy: 9 }).energy, 5);
+}
+
+console.log('\n── datos de ejemplo ──');
+{
+  const demo = generateDemoSessions(NOW);
+  ok('genera varias semanas de sesiones', demo.length > 40);
+  check('determinista', generateDemoSessions(NOW).map((s) => s.minutes), demo.map((s) => s.minutes));
+  ok('todas las sesiones son válidas', demo.every((s) => validateSession(s).ok));
+  ok('ninguna sesión futura', demo.every((s) => s.date <= T));
+  ok('ids únicos', new Set(demo.map((s) => s.id)).size === demo.length);
+  const stats = computeAll(demo, NOW);
+  ok('racha activa al menos de ' + DEMO_STREAK + ' días', stats.streaks.current >= DEMO_STREAK - 1);
+  ok('cinco materias', stats.subjects.length === 5);
+  ok('una materia claramente principal', stats.subjects[0].minutes > stats.subjects[4].minutes * 3);
+  const demoStore = createStore();
+  demoStore.replaceAll(demo);
+  ok('desbloquea logros', demoStore.getState().achievements.all.some((a) => a.unlocked));
+  ok('XP finita', Number.isFinite(demoStore.getState().xp));
 }
 
 console.log('\n── sonido ──');

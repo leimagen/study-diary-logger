@@ -422,6 +422,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .btn--primary:hover { background: #fff; box-shadow: 0 0 28px rgba(220, 239, 255, 0.3); transform: translateY(-1px); }
 .btn--primary:active { transform: translateY(0); }
 .btn--ghost { color: var(--text-dim); }
+/* Cargar datos de ejemplo: visible pero secundario, con contorno. La acción
+   principal sigue siendo registrar una sesión. */
+.btn--demo {
+  flex: 0 0 auto;
+  border-color: var(--line-strong);
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+.btn--demo[hidden] { display: none; }
 .btn--danger { color: var(--red); border-color: rgba(217, 138, 138, 0.22); }
 .btn--danger:hover { background: rgba(217, 138, 138, 0.08); border-color: rgba(217, 138, 138, 0.45); }
 .btn label, label.btn { display: block; text-align: center; cursor: pointer; }
