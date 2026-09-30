@@ -105,6 +105,14 @@ check('minutos de hoy', all.totals.todayMinutes, 60);
 const subs = bySubject([...many, { ...daysAgo(0), subject: 'Historia', topic: 'Guerra Fría' }]);
 check('nº materias', subs.length, 2);
 check('materia principal', subs[0].subject, 'Física');
+{
+  // El matiz sigue la primera aparición, no el ranking por minutos.
+  const early = { ...daysAgo(5), subject: 'Latín', topic: 'x', minutes: 10 };
+  const late = { ...daysAgo(1), subject: 'Química', topic: 'y', minutes: 300 };
+  const tinted = bySubject([late, early]);
+  check('matiz: la materia más antigua recibe el 0', tinted.find((s) => s.subject === 'Latín').tint, 0);
+  check('matiz: no depende de los minutos', tinted.find((s) => s.subject === 'Química').tint, 1);
+}
 
 const hm = heatmap([daysAgo(0), daysAgo(1)], 119, NOW);
 ok('heatmap tiene celdas', hm.cells.length > 100);

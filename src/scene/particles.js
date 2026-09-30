@@ -200,56 +200,6 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
     }
   }
 
-  /**
-   * Polvo ambiental continuo.
-   *
-   * No se siembra una vez: se mantiene un presupuesto por segundo y se
-   * reemite en `update`. Con un `seed` único, las partículas mueren a los
-   * 6-12 s y el aire se queda permanentemente vacío.
-   *
-   * @param {{bounds, rate, color, size}} opts
-   */
-  function createAmbientDust({ bounds, rate = 55, color = 0x9fd8ff } = {}) {
-    let carry = 0;
-    return {
-      bounds,
-      rate,
-      color,
-      /** @param {number} dt */
-      update(dt) {
-        // Presupuesto fraccionario: a 10 fps no se emiten 5,5 partículas.
-        carry += rate * dt;
-        let n = Math.floor(carry);
-        if (n <= 0) return;
-        carry -= n;
-
-        for (let i = 0; i < n; i++) {
-          emit({
-            position: {
-              x: (Math.random() - 0.5) * bounds.x,
-              y: Math.random() * bounds.y,
-              z: (Math.random() - 0.5) * bounds.z,
-            },
-            // Deriva lenta lateral y ascenso tenue: se percibe como polvo en
-            // suspension, no como lluvia.
-            velocity: {
-              x: (Math.random() - 0.5) * 0.14,
-              y: 0.05 + Math.random() * 0.12,
-              z: (Math.random() - 0.5) * 0.14,
-            },
-            color: Math.random() < 0.15 ? 0xffe9c4 : color,
-            // Tamano covariante en pantalla gracias al factor 300/-z del
-            // shader. Bajado: a 0.1-0.3 los puntos mordian demasiado.
-            size: 0.05 + Math.random() * 0.16,
-            life: 8 + Math.random() * 8,
-            dragFactor: 0.15,
-            gravityFactor: 0.01,
-          });
-        }
-      },
-    };
-  }
-
   function update(dt) {
     let alive = 0;
     const step = Math.min(dt, 0.05); // evita saltos al volver de una pestaña inactiva
@@ -280,7 +230,7 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
       positions[i3 + 1] += velocities[i3 + 1] * step;
       positions[i3 + 2] += velocities[i3 + 2] * step;
 
-      // Las chispas ambientales rebotan softly en el suelo para no perderse.
+      // Las chispas rebotan en el suelo en vez de atravesarlo.
       if (positions[i3 + 1] < 0.05 && gravity[i] <= 0.05) {
         positions[i3 + 1] = 0.05;
         velocities[i3 + 1] = Math.abs(velocities[i3 + 1]) * 0.4;
@@ -303,7 +253,6 @@ export function createSparkSystem({ capacity = 1500 } = {}) {
     points,
     burst,
     emit,
-    createAmbientDust,
     update,
     get activeCount() {
       return activeCount;

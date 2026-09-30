@@ -88,21 +88,49 @@ export function computeTotals(sessions, now = new Date()) {
   };
 }
 
-/** Desglose por materia: minutos, sesiones y tema más frecuente. */
+/** Número de matices de materia (ver scene/palette.js y --tint-N en CSS). */
+export const SUBJECT_TINT_COUNT = 6;
+
+/**
+ * Desglose por materia: minutos, sesiones y tema más frecuente.
+ *
+ * `tint` es el matiz de la materia en la escena y en el panel. Se asigna por
+ * orden de primera aparición, no por minutos: el ranking cambia al estudiar y
+ * el color de una materia no debe saltar de una a otra.
+ */
 export function bySubject(sessions) {
   const map = new Map();
   for (const s of sessions) {
     if (!map.has(s.subject)) {
-      map.set(s.subject, { subject: s.subject, minutes: 0, sessions: 0, topics: new Map(), lastDate: s.date });
+      map.set(s.subject, {
+        subject: s.subject,
+        minutes: 0,
+        sessions: 0,
+        topics: new Map(),
+        firstDate: s.date,
+        lastDate: s.date,
+      });
     }
     const e = map.get(s.subject);
     e.minutes += s.minutes;
     e.sessions += 1;
+    e.firstDate = s.date < e.firstDate ? s.date : e.firstDate;
     e.lastDate = s.date > e.lastDate ? s.date : e.lastDate;
     e.topics.set(s.topic, (e.topics.get(s.topic) ?? 0) + s.minutes);
   }
+
+  const tints = new Map(
+    [...map.values()]
+      .sort((a, b) => a.firstDate.localeCompare(b.firstDate) || a.subject.localeCompare(b.subject))
+      .map((e, i) => [e.subject, i % SUBJECT_TINT_COUNT]),
+  );
+
   return [...map.values()]
-    .map((e) => ({ ...e, topTopic: [...e.topics.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '' }))
+    .map((e) => ({
+      ...e,
+      tint: tints.get(e.subject),
+      topTopic: [...e.topics.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '',
+    }))
     .sort((a, b) => b.minutes - a.minutes);
 }
 

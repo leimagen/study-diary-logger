@@ -64,8 +64,18 @@ export function createHUD({ root, lab }) {
     title: 'Cámara automática',
     text: 'AUTO',
     onClick: () => {
-      lab.setAutoRotate(!lab.controls.autoRotate);
-      rotateBtn.classList.toggle('is-off', !lab.controls.autoRotate);
+      lab.setAutoRotate(!lab.autoRotate);
+      rotateBtn.classList.toggle('is-off', !lab.autoRotate);
+    },
+  });
+  const slitsBtn = el('button', {
+    class: lab.slitsEnabled ? 'ctl' : 'ctl is-off',
+    type: 'button',
+    title: 'Rendijas de luz del muro',
+    text: 'LUZ',
+    onClick: () => {
+      lab.setSlitsEnabled(!lab.slitsEnabled);
+      slitsBtn.classList.toggle('is-off', !lab.slitsEnabled);
     },
   });
   const resetBtn = el('button', {
@@ -85,7 +95,7 @@ export function createHUD({ root, lab }) {
     levelBlock,
     streakBlock,
     el('div', { class: 'hud-stats' }, [todayBlock, totalBlock]),
-    el('div', { class: 'hud-controls' }, [dofBtn, rotateBtn, resetBtn]),
+    el('div', { class: 'hud-controls' }, [slitsBtn, dofBtn, rotateBtn, resetBtn]),
   ]);
 
   /* ---------- Toasts ---------- */

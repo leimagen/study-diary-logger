@@ -95,7 +95,7 @@ const historyPanel = createHistoryPanel({
   onDelete: (session) => {
     if (!confirm(`¿Eliminar la sesión de ${session.subject} — ${session.topic}?`)) return;
     store.removeSession(session.id);
-    lab.celebrate({ x: 0, y: 1.4, z: 0 }, { color: 0xff6a6a, big: false });
+    lab.celebrate({ x: 0, y: 1.4, z: 0 }, { color: 0xd98a8a, big: false });
   },
   onFocus: (session) => {
     lab.focusAchievement('first-session');
