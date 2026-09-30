@@ -5,6 +5,8 @@ sesión de estudio y la sala reacciona: el reactor late más fuerte con tu racha
 cada materia levanta su propia columna y los logros se convierten en medallones
 de metal.
 
+**[Abrir la demo en vivo →](https://leimagen.github.io/study-diary-logger/)**
+
 ![La bóveda: reactor suspendido sobre la fuente, torres de materias y contraluz de una rendija](docs/escena.jpg)
 
 La escena imagina un museo futurista sellado durante milenios y recién
