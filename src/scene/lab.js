@@ -52,10 +52,10 @@ const PALETTE = {
 const HOME = { position: new Vector3(0, 5.6, 19), target: new Vector3(0, 3.0, 0) };
 
 /**
- * Rendijas de luz del muro. Apagadas a peticion del usuario para probar la
- * sala sin ellas; `lab.setSlitsEnabled(true)` las vuelve a encender.
+ * Rendijas de luz del muro: la contraluz de la referencia. Encendidas por
+ * defecto; el boton LUZ del HUD las apaga.
  */
-const SLITS_ON = false;
+const SLITS_ON = true;
 
 export function createLab({ canvas, container, onAchievementClick } = {}) {
   /* ---------------- Renderer ---------------- */
