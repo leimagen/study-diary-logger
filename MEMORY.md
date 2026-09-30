@@ -103,8 +103,6 @@ problema que no existía, y que lo arreglara él.
 
 ## Sesión 2 — 2026-09-29 · Realismo visual, ComfyUI y organización del repo
 
-*(en curso)*
-
 ### Problema: ComfyUI no arrancaba
 
 **Diagnóstico real: no estaba instalado.** No era un fallo de configuración,
@@ -257,4 +255,123 @@ capa emisiva del suelo.
 - **Edición de sesiones**: `store.updateSession` existe; la UI solo añade y
   borra.
 
+---
 
+## Sesión 3 — 2026-09-30 · Bóveda de museo sellado y sonido de ambiente
+
+El usuario retomó el proyecto con otro modelo buscando un resultado «más
+realista y limpio». Antes de tocar nada se revisó la escena con datos de
+prueba y se propuso una dirección; el usuario respondió con una imagen de
+referencia: sala oscura de paneles hexagonales, contraluz de una rendija
+vertical, pieza suspendida, filos LED en plataformas escalonadas y suelo
+mojado. Su idea: **un museo futurista descubierto por otra civilización,
+sellado durante milenios**.
+
+### Diagnóstico de partida
+
+Lo que restaba limpieza no era falta de realismo sino **dos estilos mezclados**:
+el PBR de la sesión 2 (suelo mojado, foco) frente a un holograma de ciencia
+ficción (esfera de alambre, aros neón, torres en cinco colores, chispas). Casi
+todo el trabajo fue quitar y unificar, no añadir efectos.
+
+### Qué se construyó
+
+En cinco rondas, cada una revisada por el usuario en el navegador:
+
+1. **Rediseño de la escena**: rotonda hexagonal con bañadores de pared,
+   rendijas de luz con `RectAreaLight`, tarima escalonada con filos LED,
+   reactor físico (giroscopio de cerámica, vidrio con núcleo, cable), torres
+   de cerámica con rendija LED, medallones de metal real por rango, polvo que
+   solo se ve en los haces, mapa de entorno construido con la propia sala, AgX.
+2. **Interfaz y detalles**: paleta de la UI llevada a la escena (negro y un
+   solo blanco frío), un matiz frío por materia compartido entre torre y panel,
+   click en el vacío para volver a la vista general, viento con tres corrientes,
+   fuente con simulación de ondas en GPU, niebla baja, rendijas conmutables
+   (apagadas por petición del usuario, botón LUZ).
+3. **Correcciones del usuario**: fuera las monedas (eran solo un ejemplo del
+   tipo de fuente), agua mucho más lenta y con rebote realista, gotas que no
+   dibujan un anillo perfecto, polvo más fino y sin titileo, niebla más alta,
+   tenue y blanca azulada.
+4. **Sonido de ambiente** procedural (Web Audio, sin ficheros): tono de sala,
+   zumbido del reactor, viento, agua y gotas posicionales, crujidos lejanos y
+   reverberación de bóveda generada.
+5. **Radio y distancia**: transmisor de onda corta junto al muro (estática,
+   silbido, voz por formantes, morse) y mezcla por distancia: de cerca nítido,
+   de lejos eco.
+
+### Bugs encontrados y su causa
+
+- **No había forma de volver a la vista general.** El botón ⌂ existía, pero el
+  HUD pasaba por debajo del panel lateral y los controles de cámara quedaban
+  tapados. Llevaba ahí desde antes de esta sesión.
+- **El color de rango de las tarjetas de logros nunca se aplicó.** `el()`
+  asignaba `style` con `Object.assign`, que ignora las variables CSS sin error.
+- **Velo lechoso sobre toda la imagen**: era el bloom, no la luz. Emisivos HDR
+  a 14× se esparcían aunque la fuerza fuera baja. Se aisló apagando todas las
+  luces: el suelo seguía gris.
+- **Muro y suelo que no reaccionaban a la luz**: albedos pintados en el canvas
+  como si fueran lineales. En sRGB, 0.03 son 0.002: más negro que el terciopelo.
+- **El reactor era una bola blanca plana**: vidrio esmerilado con un núcleo
+  demasiado brillante reparte la luz por toda la esfera.
+- **«Anillos que suben por las torres»** (lo describió el usuario): no había
+  nada animado en las torres. Eran las capas horizontales de la niebla cortando
+  las columnas, con el brillo cambiando al moverse. Se resolvió pasando a
+  niebla volumétrica.
+- **Polvo que titilaba**: puntos de 1 px con MSAA cubren más o menos muestras
+  según su posición subpíxel.
+- **Agua con ruido en cruz y rebote falso**: gotas de pocas celdas (dispersión
+  de la malla) y pared con altura fija a 0, que invierte la onda.
+
+### Diagnósticos y decisiones que conviene recordar
+
+- **«Pilares externos» se interpretó como las rendijas de luz** sin confirmarlo
+  con el usuario. Se dejaron apagadas con un botón para comparar. Si en el
+  futuro se habla de «pilares», preguntar.
+- **La cruz oscura en el fondo de la fuente es correcta**: sombra de los
+  anillos del giroscopio, proyectada por el foco de encima.
+- **El sonido no se puede oír desde el agente: se midió.** Analizador
+  intercalado antes de `destination`, niveles en dBFS por bandas y posiciones
+  de cámara. Funcionó bien para calibrar; el equilibrio fino lo juzga el
+  usuario de oído (le encantó).
+- Los errores de consola con `?t=` volvieron a aparecer por cientos durante
+  las ediciones. Todos eran de versiones intermedias; se confirmó con `grep`
+  antes de tocar nada, como dice `AGENTS.md`.
+
+### Error propio: parches con heredoc
+
+Los parches con `node -e` o heredoc en bash fallaron varias veces con template
+literals y `${...}` (bash los interpreta o corta el heredoc). Lo fiable fue
+escribir el script de parche en el scratchpad con la herramienta de escritura
+y ejecutarlo con `node`.
+
+### Verificación
+
+- Tests: de 82 a **100** comprobaciones (matiz de materia, sonido, morse).
+- Build correcto en cada ronda.
+- Rendimiento a resolución 1×: 91 fps con la escena nueva, ~81 fps con la
+  niebla volumétrica.
+- Estado vacío de la escena revisado con captura.
+
+### Publicación
+
+- PR [#1](https://github.com/leimagen/study-diary-logger/pull/1):
+  `.claude/launch.json` para arrancar la vista previa desde el panel.
+- PR [#2](https://github.com/leimagen/study-diary-logger/pull/2): escena y
+  sonido, en dos commits (`0789065`, `a78ec89`).
+- Ambos fusionados en `main` con merge commit (`bb705a3`) y ramas borradas.
+
+### Pendiente
+
+- **XP en `NaN` al importar sesiones sin `energy`.** Se vio con datos de
+  prueba sembrados a mano; la UI siempre rellena el campo, pero `import`
+  no valida. Sin corregir.
+- **Rendijas: decidir si se quedan apagadas.** Sin ellas la sala es más
+  tranquila; con ellas se recupera la contraluz de la referencia.
+- **Texturas de ComfyUI** de `public/textures/` sin uso: son chapa cepillada y
+  no encajan con el muro hexagonal. Generar nuevas si se quiere volver a usar
+  el pipeline.
+- **Rendimiento en pantallas de densidad 2×** sin medir. Unas 20 luces, dos
+  reflectores y la niebla por raymarching. Si hay tirones, quitar la luz de
+  cada torre y bajar la resolución de la niebla.
+- **Backend** y **edición de sesiones en la UI**: siguen pendientes de la
+  sesión 2.
